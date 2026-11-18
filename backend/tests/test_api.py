@@ -232,3 +232,18 @@ def test_ai_analysis_config_and_ask(client, admin, tenant, monkeypatch):
     assert r.status_code == 200, r.text
     assert "2 instâncias EC2" in r.json()["answer"]
     assert '"ec2_total":' in captured["json"]["messages"][0]["content"]
+
+
+def test_inventory_time_travel(client, admin, tenant):
+    t = tenant["id"]
+    login(client, admin["email"], admin["password"])
+    inv_latest = client.get(f"/api/tenants/{t}/inventory").json()
+    versions = inv_latest["versions"]["123456789012"]
+    assert len(versions) >= 2
+    oldest_id = versions[-1]["id"]
+    latest_id = versions[0]["id"]
+    assert oldest_id != latest_id
+
+    inv_old = client.get(f"/api/tenants/{t}/inventory?collection_id={oldest_id}").json()
+    selected = {c["account_id"]: c["id"] for c in inv_old["collections"]}
+    assert selected["123456789012"] == oldest_id

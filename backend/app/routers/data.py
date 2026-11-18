@@ -1,10 +1,10 @@
 """Inventário consolidado, achados, anotações e documentação do cliente."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import desc, select
 
 from ..deps import Ctx, tenant_ctx
-from ..models import Note, TenantDoc, TenantState, User
+from ..models import Collection, Note, TenantDoc, TenantState, User
 from ..services import pipeline
 
 router = APIRouter(prefix="/api/tenants/{tenant_id}", tags=["data"])
@@ -12,16 +12,72 @@ MAX_NOTE = 20_000
 
 
 @router.get("/inventory")
-def inventory(c: Ctx = Depends(tenant_ctx("client"))):
-    """Tudo que o Explorer precisa: coleta vigente de cada conta, anotações, documentação e marca do cliente."""
+def inventory(
+    collection_id: int | None = Query(default=None),
+    collection_ids: str | None = Query(default=None),
+    c: Ctx = Depends(tenant_ctx("client")),
+):
+    """Tudo que o Explorer precisa: coleta vigente (ou histórica selecionada) de cada conta, versões, anotações e marca."""
     cols = pipeline.latest_collections(c.db, c.tenant.id)
+    by_account = {x.account_id: x for x in cols}
+
+    wanted_ids: list[int] = []
+    if collection_id is not None:
+        wanted_ids.append(collection_id)
+    if collection_ids:
+        for part in collection_ids.split(","):
+            part = part.strip()
+            if part.isdigit():
+                wanted_ids.append(int(part))
+
+    if wanted_ids:
+        overrides = list(
+            c.db.scalars(
+                select(Collection).where(
+                    Collection.tenant_id == c.tenant.id,
+                    Collection.id.in_(wanted_ids),
+                    Collection.status == "done",
+                )
+            )
+        )
+        for ov in overrides:
+            if ov.payload:
+                by_account[ov.account_id] = ov
+        cols = list(by_account.values())
+
+    all_done = list(
+        c.db.scalars(
+            select(Collection)
+            .where(Collection.tenant_id == c.tenant.id, Collection.status == "done")
+            .order_by(desc(Collection.collected_at), desc(Collection.id))
+        )
+    )
+    versions: dict[str, list[dict]] = {}
+    for x in all_done:
+        versions.setdefault(x.account_id, []).append({
+            "id": x.id,
+            "account_id": x.account_id,
+            "alias": x.alias,
+            "source": x.source,
+            "trigger": x.trigger,
+            "collected_at": x.collected_at,
+            "created_at": x.created_at,
+            "summary": x.summary,
+        })
+
     notes = {n.key: n.data for n in c.db.scalars(select(Note).where(Note.tenant_id == c.tenant.id))}
     if c.role == "client":  # cliente vê o ambiente e as tratativas, não as anotações internas
         notes = {k: v for k, v in notes.items() if k.startswith("finding|")}
     doc = c.db.get(TenantDoc, c.tenant.id)
-    return {"tenant": {"id": c.tenant.id, "name": c.tenant.name, "logo": c.tenant.logo, "color": c.tenant.color},
-            "role": c.role, "accounts": [x.payload for x in cols if x.payload], "notes": notes, "docs": (doc.data if doc else {}) or {},
-            "collections": [{"id": x.id, "account_id": x.account_id, "collected_at": x.collected_at} for x in cols]}
+    return {
+        "tenant": {"id": c.tenant.id, "name": c.tenant.name, "logo": c.tenant.logo, "color": c.tenant.color},
+        "role": c.role,
+        "accounts": [x.payload for x in cols if x.payload],
+        "notes": notes,
+        "docs": (doc.data if doc else {}) or {},
+        "collections": [{"id": x.id, "account_id": x.account_id, "alias": x.alias, "collected_at": x.collected_at, "source": x.source, "trigger": x.trigger} for x in cols],
+        "versions": versions,
+    }
 
 
 @router.get("/findings")

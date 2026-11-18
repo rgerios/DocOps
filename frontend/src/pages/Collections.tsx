@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ago, api, can, downloadBlob, fmtDT, type CollectionRow } from '../api'
 import { useTenant } from '../App'
 import { Btn, Card, Empty, ErrorBox, Field, Modal, PageHead, Pill, StatusPill, useConfirm, useLoad, useToast } from '../ui'
@@ -8,6 +9,7 @@ const TRIGGER: Record<string, string> = { manual: 'manual', schedule: 'agendada'
 
 export default function Collections() {
   const { tenant, role } = useTenant()
+  const nav = useNavigate()
   const toast = useToast()
   const [acct, setAcct] = useState('')
   const [open, setOpen] = useState<number | null>(null)
@@ -64,11 +66,14 @@ export default function Collections() {
                 <td className="small">{fmtDT(c.collected_at)}</td>
                 <td className="num">{c.summary?.vpcs ?? '—'}</td><td className="num">{c.summary?.ec2 ?? '—'}</td><td className="num">{c.summary?.rds ?? '—'}</td>
                 <td><DiffBadge id={c.id} c={c} /></td>
-                <td className="r">{c.status === 'done' && <Btn small kind="ghost" onClick={async (e) => {
-                  e.stopPropagation()
-                  const p = await api(`/api/tenants/${tenant.id}/collections/${c.id}/payload`)
-                  downloadBlob(new Blob([JSON.stringify(p)], { type: 'application/json' }), `docviva_${c.alias}_${c.account_id}_${c.id}.json`)
-                }}>JSON</Btn>}</td>
+                <td className="r">{c.status === 'done' && <div className="row end">
+                  <Btn small kind="ghost" onClick={(e) => { e.stopPropagation(); nav(`/t/${tenant.id}/explorer?collection_id=${c.id}`) }}>Abrir no Explorer</Btn>
+                  <Btn small kind="ghost" onClick={async (e) => {
+                    e.stopPropagation()
+                    const p = await api(`/api/tenants/${tenant.id}/collections/${c.id}/payload`)
+                    downloadBlob(new Blob([JSON.stringify(p)], { type: 'application/json' }), `docviva_${c.alias}_${c.account_id}_${c.id}.json`)
+                  }}>JSON</Btn>
+                </div>}</td>
               </tr>))}
             </tbody>
           </table>)}
