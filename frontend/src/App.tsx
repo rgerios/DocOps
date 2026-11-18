@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { api, can, ROLE_LABEL, setUnauthorizedHandler, type Me, type Role, type TenantRef } from './api'
 import logoWhite from './assets/logo-white.png'
@@ -85,6 +85,15 @@ function Shell({ tenant, children }: { tenant?: TenantRef; children: ReactNode }
   const { me, setMe } = useSession()
   const nav = useNavigate()
   const [menu, setMenu] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!menu) return
+    const onDown = (e: PointerEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenu(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(false) }
+    window.addEventListener('pointerdown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => { window.removeEventListener('pointerdown', onDown); window.removeEventListener('keydown', onKey) }
+  }, [menu])
   const r = tenant?.role
   const links: [string, string, boolean][] = tenant ? [
     ['explorer', 'Explorer', true], ['coletas', 'Coletas', can(r, 'viewer')], ['contas', 'Contas AWS', can(r, 'viewer')],
@@ -103,11 +112,11 @@ function Shell({ tenant, children }: { tenant?: TenantRef; children: ReactNode }
           </select>
         )}
         <nav className="tabs-top">{links.filter((l) => l[2]).map(([to, label]) => <NavLink key={to} to={`/t/${tenant!.id}/${to}`}>{label}</NavLink>)}</nav>
-        <div className="user">
+        <div className="user" ref={menuRef}>
           {tenant && <span className="role-tag">{ROLE_LABEL[tenant.role]}</span>}
-          <button className="avatar" onClick={() => setMenu(!menu)} aria-label="Menu do usuário">{(me.name || me.email).slice(0, 1).toUpperCase()}</button>
+          <button className="avatar" onClick={() => setMenu(!menu)} aria-label="Menu do usuário" aria-expanded={menu}>{(me.name || me.email).slice(0, 1).toUpperCase()}</button>
           {menu && (
-            <div className="user-pop" onMouseLeave={() => setMenu(false)}>
+            <div className="user-pop">
               <div className="who"><b>{me.name}</b><span>{me.email}</span></div>
               <button onClick={() => { setMenu(false); nav('/conta') }}>Minha conta e MFA</button>
               {me.is_superadmin && <button onClick={() => { setMenu(false); nav('/plataforma') }}>Administração da plataforma</button>}

@@ -111,3 +111,34 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[], pollMs?: (data
 export function ErrorBox({ error }: { error?: string }) {
   return error ? <div className="alert bad">{error}</div> : null
 }
+
+// ── confirmação em modal ──
+interface ConfirmOpts { title?: string; message: ReactNode; confirmLabel?: string; danger?: boolean }
+type ConfirmFn = (opts: ConfirmOpts) => Promise<boolean>
+const ConfirmCtx = createContext<ConfirmFn>(async () => false)
+export const useConfirm = () => useContext(ConfirmCtx)
+
+export function ConfirmProvider({ children }: { children: ReactNode }) {
+  const [req, setReq] = useState<{ opts: ConfirmOpts; resolve: (v: boolean) => void } | null>(null)
+  const confirm = useCallback<ConfirmFn>((opts) => new Promise((resolve) => setReq({ opts, resolve })), [])
+  const answer = (v: boolean) => { req?.resolve(v); setReq(null) }
+  return (
+    <ConfirmCtx.Provider value={confirm}>
+      {children}
+      {req && (
+        <Modal
+          title={req.opts.title || 'Confirmar ação'}
+          onClose={() => answer(false)}
+          footer={<>
+            <Btn onClick={() => answer(false)}>Cancelar</Btn>
+            <Btn kind={req.opts.danger === false ? 'primary' : 'danger'} onClick={() => answer(true)}>
+              {req.opts.confirmLabel || 'Confirmar'}
+            </Btn>
+          </>}
+        >
+          <p>{req.opts.message}</p>
+        </Modal>
+      )}
+    </ConfirmCtx.Provider>
+  )
+}

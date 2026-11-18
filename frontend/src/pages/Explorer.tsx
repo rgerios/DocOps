@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, downloadBlob } from '../api'
 import { useTenant } from '../App'
-import { useToast } from '../ui'
+import { Btn, useToast } from '../ui'
 
 // O Explorer é o DocViva (public/viewer) em modo incorporado: recebe o inventário por postMessage
 // e devolve anotações, documentação e pedidos de PDF, que esta página grava pela API.
@@ -10,17 +10,23 @@ export default function Explorer() {
   const frame = useRef<HTMLIFrameElement>(null)
   const toast = useToast()
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [errMsg, setErrMsg] = useState('')
+
+  const send = useCallback(async () => {
+    setState('loading')
+    setErrMsg('')
+    try {
+      const inv = await api(`/api/tenants/${tenant.id}/inventory`)
+      frame.current?.contentWindow?.postMessage({ type: 'docops:load', ...inv }, location.origin)
+      setState('ready')
+    } catch (e: any) {
+      setErrMsg(e.message || 'Falha ao carregar o inventário.')
+      setState('error')
+      toast(e.message, 'err')
+    }
+  }, [tenant.id, toast])
 
   useEffect(() => {
-    let alive = true
-    const send = async () => {
-      try {
-        const inv = await api(`/api/tenants/${tenant.id}/inventory`)
-        if (!alive) return
-        frame.current?.contentWindow?.postMessage({ type: 'docops:load', ...inv }, location.origin)
-        setState('ready')
-      } catch (e: any) { setState('error'); toast(e.message, 'err') }
-    }
     const onMsg = async (e: MessageEvent) => {
       if (e.origin !== location.origin || e.source !== frame.current?.contentWindow) return
       const d = e.data || {}
@@ -40,12 +46,21 @@ export default function Explorer() {
       }
     }
     window.addEventListener('message', onMsg)
-    return () => { alive = false; window.removeEventListener('message', onMsg) }
-  }, [tenant.id, toast])
+    return () => { window.removeEventListener('message', onMsg) }
+  }, [tenant.id, toast, send])
 
   return (
     <div className="explorer">
       {state === 'loading' && <div className="explorer-loading"><span className="spin dark" /> Carregando inventário…</div>}
+      {state === 'error' && (
+        <div className="explorer-loading">
+          <div className="empty">
+            <b>Não foi possível carregar o Explorer</b>
+            <p className="muted">{errMsg}</p>
+            <Btn kind="primary" onClick={send}>Tentar novamente</Btn>
+          </div>
+        </div>
+      )}
       <iframe ref={frame} title="Explorer" src="/viewer/index.html?embed=1" />
     </div>
   )

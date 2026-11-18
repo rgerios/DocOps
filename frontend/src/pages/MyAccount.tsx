@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { api, fmtDT, ROLE_LABEL } from '../api'
 import { useSession } from '../App'
-import { Btn, Card, Field, PageHead, Pill, Secret, useToast } from '../ui'
+import { Btn, Card, Field, PageHead, Pill, Secret, useConfirm, useToast } from '../ui'
 
 export default function MyAccount() {
   const { me, setMe } = useSession()
   const toast = useToast()
+  const confirm = useConfirm()
   const [cur, setCur] = useState('')
   const [n1, setN1] = useState('')
   const [setup, setSetup] = useState<{ secret: string; qr: string } | null>(null)
@@ -17,7 +18,7 @@ export default function MyAccount() {
   const startMfa = async () => { try { setSetup(await api('/api/auth/mfa/setup', { method: 'POST' })) } catch (e: any) { toast(e.message, 'err') } }
   const enableMfa = async () => { try { setMe(await api('/api/auth/mfa/enable', { body: { code } })); setSetup(null); setCode(''); toast('MFA ativado') } catch (e: any) { toast(e.message, 'err') } }
   const disableMfa = async () => { try { setMe(await api('/api/auth/mfa/disable', { body: dis })); setDis({ password: '', code: '' }); toast('MFA desativado', 'info') } catch (e: any) { toast(e.message, 'err') } }
-  const logoutAll = async () => { if (confirm('Encerrar a sessão em todos os navegadores, inclusive este?')) { await api('/api/auth/logout-all', { method: 'POST' }); setMe(null) } }
+  const logoutAll = async () => { if (await confirm({ title: 'Encerrar sessões', message: 'Encerrar a sessão em todos os navegadores, inclusive este?', confirmLabel: 'Encerrar todas' })) { await api('/api/auth/logout-all', { method: 'POST' }); setMe(null) } }
   return (
     <div className="page narrow">
       <PageHead title="Minha conta" sub={`${me.name} · ${me.email}${me.last_login ? ` · último acesso ${fmtDT(me.last_login)}` : ''}`} />

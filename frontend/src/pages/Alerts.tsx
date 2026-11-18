@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useTenant } from '../App'
-import { Btn, Card, ErrorBox, Field, PageHead, useLoad, useToast } from '../ui'
+import { Btn, Card, ErrorBox, Field, PageHead, useConfirm, useLoad, useToast } from '../ui'
 
 const SEVS: [string, string][] = [['critical', 'Crítico'], ['high', 'Alto'], ['medium', 'Médio'], ['low', 'Baixo'], ['info', 'Info']]
 
 export default function Alerts() {
   const { tenant } = useTenant()
   const toast = useToast()
+  const confirm = useConfirm()
   const { data, error, reload } = useLoad<any>(() => api(`/api/tenants/${tenant.id}/settings`), [tenant.id])
   const [url, setUrl] = useState('')
   const [sev, setSev] = useState<string[]>([])
@@ -36,7 +37,7 @@ export default function Alerts() {
         </Field>
         <div className="row">
           <Btn kind="primary" busy={busy} onClick={() => save()}>Salvar</Btn>
-          {data?.teams_configured && <><Btn onClick={test}>Enviar teste</Btn><Btn kind="ghost" onClick={() => confirm('Remover o webhook? Os alertas param.') && save(true)}>Remover webhook</Btn></>}
+          {data?.teams_configured && <><Btn onClick={test}>Enviar teste</Btn><Btn kind="ghost" onClick={async () => { if (await confirm({ title: 'Remover webhook', message: 'Remover o webhook? Os alertas param.', confirmLabel: 'Remover' })) save(true) }}>Remover webhook</Btn></>}
         </div>
       </Card>
       <Card title="O que alertar">

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { ago, api, can, downloadBlob, fmtDT, type CollectionRow } from '../api'
 import { useTenant } from '../App'
-import { Btn, Card, Empty, ErrorBox, Modal, PageHead, Pill, StatusPill, useLoad, useToast } from '../ui'
+import { Btn, Card, Empty, ErrorBox, Modal, PageHead, Pill, StatusPill, useConfirm, useLoad, useToast } from '../ui'
 
 const CHANGE: Record<string, [string, string]> = { added: ['novo', 'ok'], removed: ['removido', 'bad'], changed: ['alterado', 'warn'] }
 const TRIGGER: Record<string, string> = { manual: 'manual', schedule: 'agendada', upload: 'arquivo' }
@@ -83,12 +83,13 @@ function DiffBadge({ c }: { id: number; c: CollectionRow }) {
 
 function Detail({ tenantId, id, canDelete, onClose, onDeleted }: { tenantId: number; id: number; canDelete: boolean; onClose: () => void; onDeleted: () => void }) {
   const toast = useToast()
+  const confirm = useConfirm()
   const [f, setF] = useState<'all' | 'added' | 'removed' | 'changed'>('all')
   const { data } = useLoad<any>(() => api(`/api/tenants/${tenantId}/collections/${id}`), [id])
   const d = data?.diff
   const items = (d?.items || []).filter((i: any) => f === 'all' || i.change === f)
   const del = async () => {
-    if (!confirm('Excluir esta coleta? O Explorer passa a usar a coleta anterior desta conta.')) return
+    if (!(await confirm({ title: 'Excluir coleta', message: 'Excluir esta coleta? O Explorer passa a usar a coleta anterior desta conta.', confirmLabel: 'Excluir' }))) return
     try { await api(`/api/tenants/${tenantId}/collections/${id}`, { method: 'DELETE' }); toast('Coleta excluída'); onDeleted() } catch (e: any) { toast(e.message, 'err') }
   }
   return (

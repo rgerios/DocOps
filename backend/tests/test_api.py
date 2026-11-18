@@ -160,3 +160,37 @@ def test_audit_log(client, admin, tenant):
     login(client, admin["email"], admin["password"])
     acts = {a["action"] for a in client.get(f"/api/tenants/{tenant['id']}/audit").json()}
     assert {"collection.uploaded", "notes.saved", "member.added"} <= acts
+
+
+def test_mfa_lockout_and_secret_validation(client, monkeypatch):
+    import pyotp
+    from app.config import settings
+    from app.db import SessionLocal
+    from app.main import bootstrap
+    from app.models import User
+    from app.security import hash_password
+
+    with SessionLocal() as db:
+        u = User(
+            email="mfa-lock@teste.local",
+            name="MFA Lock",
+            password_hash=hash_password("SenhaForte#2026"),
+            totp_enabled=True,
+            totp_secret=pyotp.random_base32(),
+            must_change_password=False,
+        )
+        db.add(u)
+        db.commit()
+
+    for _ in range(settings.max_failed_logins - 1):
+        r = login(client, "mfa-lock@teste.local", "SenhaForte#2026", totp="000000")
+        assert r.status_code == 401
+    r = login(client, "mfa-lock@teste.local", "SenhaForte#2026", totp="000000")
+    assert r.status_code == 423
+
+    monkeypatch.setattr(settings, "secret_key", "troque-esta-chave")
+    try:
+        bootstrap()
+        raise AssertionError("Esperava RuntimeError para SECRET_KEY padrão em produção")
+    except RuntimeError:
+        pass

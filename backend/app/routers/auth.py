@@ -1,4 +1,7 @@
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+import threading
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
@@ -14,6 +17,56 @@ from ..security import (COOKIE, hash_password, make_session, new_totp_secret, pa
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 _DUMMY = hash_password("docops-timing-dummy")
+_mem_lock = threading.Lock()
+_mem_hits: dict[str, list[float]] = defaultdict(list)
+
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _check_login_rate_limit(request: Request) -> None:
+    ip = _client_ip(request)
+    limit = settings.login_rate_limit_per_ip
+    window = settings.login_rate_window_seconds
+    if not settings.redis_url.startswith("memory://"):
+        try:
+            from redis import Redis
+            r = Redis.from_url(settings.redis_url, socket_connect_timeout=1, socket_timeout=1)
+            key = f"docops:rl:login:{ip}"
+            count = r.incr(key)
+            if count == 1:
+                r.expire(key, window)
+            if count > limit:
+                raise HTTPException(429, "Muitas tentativas de login deste endereço. Aguarde alguns minutos.")
+            return
+        except HTTPException:
+            raise
+        except Exception:
+            pass  # fallback em memória se o Redis estiver indisponível
+
+    now_ts = time.monotonic()
+    with _mem_lock:
+        hits = [t for t in _mem_hits[ip] if now_ts - t < window]
+        hits.append(now_ts)
+        _mem_hits[ip] = hits
+        if len(hits) > limit:
+            raise HTTPException(429, "Muitas tentativas de login deste endereço. Aguarde alguns minutos.")
+
+
+def _record_failed_attempt(db: Session, request: Request, u: User, now: datetime) -> None:
+    u.failed_attempts += 1
+    if u.failed_attempts >= settings.max_failed_logins:
+        u.locked_until = now + timedelta(minutes=settings.lockout_minutes)
+        u.failed_attempts = 0
+        db.commit()
+        audit(db, request, u, "login.locked")
+        raise HTTPException(423, f"Conta bloqueada por {settings.lockout_minutes} minutos após tentativas inválidas.")
+    db.commit()
+    audit(db, request, u, "login.failed")
 
 
 class LoginIn(BaseModel):
@@ -42,6 +95,7 @@ def set_cookie(resp: Response, u: User):
 
 @router.post("/login")
 def login(body: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)):
+    _check_login_rate_limit(request)
     email = body.email.strip().lower()
     u = db.scalar(select(User).where(func.lower(User.email) == email))
     now = datetime.now(timezone.utc)
@@ -53,22 +107,13 @@ def login(body: LoginIn, request: Request, response: Response, db: Session = Dep
     if locked:
         raise HTTPException(423, "Conta bloqueada temporariamente por tentativas inválidas. Tente mais tarde.")
     if not verify_password(u.password_hash, body.password):
-        u.failed_attempts += 1
-        if u.failed_attempts >= settings.max_failed_logins:
-            u.locked_until = now + timedelta(minutes=settings.lockout_minutes)
-            u.failed_attempts = 0
-            db.commit()
-            audit(db, request, u, "login.locked")
-            raise HTTPException(423, f"Conta bloqueada por {settings.lockout_minutes} minutos após tentativas inválidas.")
-        db.commit()
-        audit(db, request, u, "login.failed")
+        _record_failed_attempt(db, request, u, now)
         raise generic
     if u.totp_enabled:
         if not body.totp:
             raise HTTPException(401, detail={"mfa_required": True, "message": "Informe o código do autenticador."})
         if not totp_ok(u.totp_secret, body.totp):
-            u.failed_attempts += 1
-            db.commit()
+            _record_failed_attempt(db, request, u, now)
             raise HTTPException(401, detail={"mfa_required": True, "message": "Código MFA inválido."})
     u.failed_attempts = 0
     u.locked_until = None

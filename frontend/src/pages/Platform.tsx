@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { ago, api, fmtD } from '../api'
 import { useSession } from '../App'
-import { Btn, Card, ErrorBox, Field, Modal, PageHead, Pill, Secret, useLoad, useToast } from '../ui'
+import { Btn, Card, ErrorBox, Field, Modal, PageHead, Pill, Secret, useConfirm, useLoad, useToast } from '../ui'
 import { AuditTable } from './Audit'
 
 export default function Platform() {
@@ -53,16 +53,17 @@ function Tenants() {
 function Users() {
   const { me } = useSession()
   const toast = useToast()
+  const confirm = useConfirm()
   const { data, error, reload } = useLoad<any[]>(() => api('/api/users'), [])
   const [add, setAdd] = useState(false)
   const [temp, setTemp] = useState<{ email: string; pwd: string } | null>(null)
   const patch = async (u: any, body: object) => { try { await api(`/api/users/${u.id}`, { method: 'PATCH', body }); reload() } catch (e: any) { toast(e.message, 'err') } }
   const resetPwd = async (u: any) => {
-    if (!confirm(`Gerar nova senha provisória para ${u.email}? As sessões abertas serão encerradas.`)) return
+    if (!(await confirm({ title: 'Redefinir senha', message: `Gerar nova senha provisória para ${u.email}? As sessões abertas serão encerradas.`, confirmLabel: 'Gerar senha' }))) return
     try { const r = await api(`/api/users/${u.id}/reset-password`, { method: 'POST' }); setTemp({ email: u.email, pwd: r.temp_password }) } catch (e: any) { toast(e.message, 'err') }
   }
   const resetMfa = async (u: any) => {
-    if (!confirm(`Remover o MFA de ${u.email}? A pessoa poderá configurar outro autenticador.`)) return
+    if (!(await confirm({ title: 'Remover MFA', message: `Remover o MFA de ${u.email}? A pessoa poderá configurar outro autenticador.`, confirmLabel: 'Remover MFA' }))) return
     try { await api(`/api/users/${u.id}/reset-mfa`, { method: 'POST' }); toast('MFA removido'); reload() } catch (e: any) { toast(e.message, 'err') }
   }
   return (

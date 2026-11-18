@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { api, can, fmtDT, type AwsAccount } from '../api'
 import { useTenant } from '../App'
-import { Btn, Card, Empty, ErrorBox, Field, Modal, PageHead, Pill, useLoad, useToast } from '../ui'
+import { Btn, Card, Empty, ErrorBox, Field, Modal, PageHead, Pill, useConfirm, useLoad, useToast } from '../ui'
 
 interface Sched { id: number; name: string; cron: string; account_ids: number[] | null; enabled: boolean; last_run: string | null; next_run: string | null; timezone: string }
 
@@ -14,6 +14,7 @@ export const cronLabel = (c: string) => PRESETS.find((p) => p[1] === c)?.[0] || 
 export default function Schedules() {
   const { tenant, role } = useTenant()
   const toast = useToast()
+  const confirm = useConfirm()
   const [edit, setEdit] = useState<Partial<Sched> | null>(null)
   const { data, error, reload } = useLoad<Sched[]>(() => api(`/api/tenants/${tenant.id}/schedules`), [tenant.id])
   const { data: accounts } = useLoad<AwsAccount[]>(() => api(`/api/tenants/${tenant.id}/accounts`), [tenant.id])
@@ -23,7 +24,7 @@ export default function Schedules() {
     try { await api(`/api/tenants/${tenant.id}/schedules/${s.id}`, { method: 'PUT', body: { ...s, enabled: !s.enabled } }); reload() } catch (e: any) { toast(e.message, 'err') }
   }
   const remove = async (s: Sched) => {
-    if (!confirm(`Excluir o agendamento "${s.name}"?`)) return
+    if (!(await confirm({ title: 'Excluir agendamento', message: `Excluir o agendamento "${s.name}"?`, confirmLabel: 'Excluir' }))) return
     try { await api(`/api/tenants/${tenant.id}/schedules/${s.id}`, { method: 'DELETE' }); reload() } catch (e: any) { toast(e.message, 'err') }
   }
   return (

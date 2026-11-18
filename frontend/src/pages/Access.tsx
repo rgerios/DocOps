@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ago, api, ROLE_LABEL, type Role } from '../api'
 import { useSession, useTenant } from '../App'
-import { Btn, Card, ErrorBox, Field, Modal, PageHead, Pill, Secret, useLoad, useToast } from '../ui'
+import { Btn, Card, ErrorBox, Field, Modal, PageHead, Pill, Secret, useConfirm, useLoad, useToast } from '../ui'
 
 const ROLE_HELP: Record<Role, string> = {
   admin: 'Tudo neste cliente: contas AWS, agendamentos, alertas, acessos e auditoria.',
@@ -14,6 +14,7 @@ export default function Access() {
   const { tenant } = useTenant()
   const { refresh } = useSession()
   const toast = useToast()
+  const confirm = useConfirm()
   const { data, error, reload } = useLoad<any[]>(() => api(`/api/tenants/${tenant.id}/members`), [tenant.id])
   const [add, setAdd] = useState(false)
   const [temp, setTemp] = useState<{ email: string; pwd: string } | null>(null)
@@ -21,7 +22,7 @@ export default function Access() {
     try { await api(`/api/tenants/${tenant.id}/members/${m.id}`, { method: 'PATCH', body: { role } }); toast('Perfil atualizado'); reload() } catch (e: any) { toast(e.message, 'err') }
   }
   const remove = async (m: any) => {
-    if (!confirm(`Remover o acesso de ${m.email} a ${tenant.name}?`)) return
+    if (!(await confirm({ title: 'Remover acesso', message: `Remover o acesso de ${m.email} a ${tenant.name}?`, confirmLabel: 'Remover' }))) return
     try { await api(`/api/tenants/${tenant.id}/members/${m.id}`, { method: 'DELETE' }); reload() } catch (e: any) { toast(e.message, 'err') }
   }
   return (

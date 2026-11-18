@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { ago, api, can, type AwsAccount } from '../api'
 import { useTenant } from '../App'
-import { Btn, Card, Empty, ErrorBox, Field, Modal, PageHead, Pill, StatusPill, useLoad, useToast } from '../ui'
+import { Btn, Card, Empty, ErrorBox, Field, Modal, PageHead, Pill, StatusPill, useConfirm, useLoad, useToast } from '../ui'
 
 const ENVS = ['', 'Produção', 'Homologação', 'Desenvolvimento', 'Compartilhada/Rede', 'Segurança/Log', 'Sandbox']
 
 export default function Accounts() {
   const { tenant, role } = useTenant()
   const toast = useToast()
+  const confirm = useConfirm()
   const [edit, setEdit] = useState<Partial<AwsAccount> | null>(null)
   const [guide, setGuide] = useState<AwsAccount | null>(null)
   const { data, error, reload } = useLoad<AwsAccount[]>(() => api(`/api/tenants/${tenant.id}/accounts`), [tenant.id],
@@ -23,7 +24,7 @@ export default function Accounts() {
     try { await api(`/api/tenants/${tenant.id}/accounts/${a.id}/collect`, { method: 'POST' }); toast(`Coleta de ${a.alias} na fila`); reload() } catch (e: any) { toast(e.message, 'err') }
   }
   const remove = async (a: AwsAccount) => {
-    if (!confirm(`Remover a conta ${a.alias} (${a.account_id})? O histórico de coletas fica preservado.`)) return
+    if (!(await confirm({ title: 'Remover conta AWS', message: `Remover a conta ${a.alias} (${a.account_id})? O histórico de coletas fica preservado.`, confirmLabel: 'Remover' }))) return
     try { await api(`/api/tenants/${tenant.id}/accounts/${a.id}`, { method: 'DELETE' }); toast('Conta removida'); reload() } catch (e: any) { toast(e.message, 'err') }
   }
 

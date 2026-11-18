@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     # Segurança de login
     max_failed_logins: int = 5
     lockout_minutes: int = 15
+    login_rate_limit_per_ip: int = 60
+    login_rate_window_seconds: int = 300
     min_password_length: int = 12
 
     # Coleta AWS: credenciais do servidor (instance profile no EC2 ou variáveis AWS_* on-premises)

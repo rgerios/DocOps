@@ -51,6 +51,10 @@ def health():
 
 def bootstrap():
     """Cria as tabelas e o primeiro administrador (só quando o banco ainda não tem usuários)."""
+    if settings.environment == "production" and (
+        settings.secret_key == "troque-esta-chave" or len(settings.secret_key) < 32
+    ):
+        raise RuntimeError("SECRET_KEY insegura ou padrão em produção. Defina uma chave forte (>= 32 caracteres) no .env.")
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
         if db.scalar(select(User).limit(1)):
