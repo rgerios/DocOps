@@ -1,0 +1,115 @@
+{
+ "sa-east-1": [],
+ "us-east-1": [
+  {
+   "vpc_id": "vpc-0aaa000000000001",
+   "name": "vpc-acme-prd",
+   "cidr": "10.40.25.0/24",
+   "extra_cidrs": [],
+   "state": "available",
+   "is_default": false,
+   "dhcp_opts": "dopt-1",
+   "tenancy": "default",
+   "owner": "111111111111",
+   "subnets": [
+    {
+     "id": "subnet-0000000000000001",
+     "name": "sn-1",
+     "cidr": "10.40.25.0/26",
+     "az": "us-east-1a",
+     "public": true,
+     "free_ips": 20,
+     "state": "available"
+    },
+    {
+     "id": "subnet-0000000000000002",
+     "name": "sn-2",
+     "cidr": "10.40.25.64/26",
+     "az": "us-east-1b",
+     "public": false,
+     "free_ips": 20,
+     "state": "available"
+    },
+    {
+     "id": "subnet-0000000000000003",
+     "name": "sn-3",
+     "cidr": "10.40.25.128/26",
+     "az": "us-east-1a",
+     "public": false,
+     "free_ips": 20,
+     "state": "available"
+    }
+   ],
+   "route_tables": [
+    {
+     "id": "rtb-1",
+     "name": "rt-pub",
+     "assocs": [
+      "subnet-0000000000000001"
+     ],
+     "routes": [
+      {
+       "dest": "10.40.25.0/24",
+       "target": "local",
+       "state": "active"
+      },
+      {
+       "dest": "0.0.0.0/0",
+       "target": "igw-1",
+       "state": "active"
+      }
+     ]
+    },
+    {
+     "id": "rtb-2",
+     "name": "rt-pri",
+     "assocs": [
+      "main"
+     ],
+     "routes": [
+      {
+       "dest": "10.40.25.0/24",
+       "target": "local",
+       "state": "active"
+      },
+      {
+       "dest": "0.0.0.0/0",
+       "target": "nat-1",
+       "state": "active"
+      },
+      {
+       "dest": "172.16.0.0/16",
+       "target": "vgw-1",
+       "state": "active"
+      },
+      {
+       "dest": "172.31.0.0/16",
+       "target": "pcx-0dead",
+       "state": "blackhole"
+      }
+     ]
+    }
+   ],
+   "igws": [
+    {
+     "id": "igw-1",
+     "name": "igw",
+     "state": "available"
+    }
+   ],
+   "nat_gws": [
+    {
+     "id": "nat-1",
+     "name": "nat",
+     "subnet": "subnet-0000000000000001",
+     "public_ip": "3.3.3.3",
+     "state": "available"
+    }
+   ],
+   "peerings": [],
+   "endpoints": [],
+   "flow_logs": []
+  }
+ ],
+ "us-west-2": []
+}

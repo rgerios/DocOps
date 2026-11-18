@@ -1,0 +1,38 @@
+# Proxy de entrada do DocOps.
+# DOCOPS_HOST: IP e/ou nomes pelos quais o servidor é acessado (separados por vírgula),
+# ex.: "10.0.10.25, docops.empresa.local". O certificado é emitido pela CA interna do Caddy
+# (autoassinado). Para usar o certificado da empresa, troque "tls internal" por
+#   tls /certs/docops.crt /certs/docops.key   (e monte a pasta /certs no docker-compose.yml)
+{
+	admin off
+}
+
+{$DOCOPS_HOST} {
+	tls internal
+
+	encode zstd gzip
+	request_body {
+		max_size 250MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'"
+		-Server
+	}
+
+	handle /api/* {
+		reverse_proxy backend:8000 {
+			transport http {
+				read_timeout 10m
+			}
+		}
+	}
+	handle {
+		reverse_proxy frontend:80
+	}
+}

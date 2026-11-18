@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest>=8
+fakeredis>=2.26
+moto[all]>=5.0

@@ -1,0 +1,114 @@
+# DocOps — stack completa. Suba com:  docker compose up -d --build
+# Configuração em .env (gerado pelo install.sh a partir de .env.example).
+name: docops
+
+x-backend: &backend
+  build: ./backend
+  image: docops-backend:latest
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+psycopg://docops:${POSTGRES_PASSWORD}@db:5432/docops
+    REDIS_URL: redis://redis:6379/0
+    TZ: ${TIMEZONE:-America/Sao_Paulo}
+  depends_on:
+    db: { condition: service_healthy }
+    redis: { condition: service_healthy }
+  restart: unless-stopped
+  networks: [internal]
+  logging: &logging
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOCOPS_HOST: ${DOCOPS_HOST:-localhost}
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [frontend, backend]
+    networks: [edge, internal]
+    logging: *logging
+
+  frontend:
+    build: ./frontend
+    image: docops-frontend:latest
+    restart: unless-stopped
+    networks: [internal]
+    logging: *logging
+
+  backend:
+    <<: *backend
+
+  worker:
+    <<: *backend
+    command: ["python", "-m", "app.worker"]
+    healthcheck: { disable: true }
+
+  scheduler:
+    <<: *backend
+    command: ["python", "-m", "app.scheduler"]
+    healthcheck: { disable: true }
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: docops
+      POSTGRES_USER: docops
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docops -d docops"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+    logging: *logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "100"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+    logging: *logging
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    entrypoint: ["sh", "/scripts/backup.sh"]
+    environment:
+      PGHOST: db
+      PGUSER: docops
+      PGDATABASE: docops
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_HOUR: ${BACKUP_HOUR:-2}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      TZ: ${TIMEZONE:-America/Sao_Paulo}
+    volumes:
+      - ./scripts/backup.sh:/scripts/backup.sh:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [internal]
+    logging: *logging
+
+networks:
+  edge: {}
+  internal: {}
+
+volumes:
+  pgdata: {}
+  redisdata: {}
+  caddy_data: {}
+  caddy_config: {}
