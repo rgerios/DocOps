@@ -247,3 +247,31 @@ def test_inventory_time_travel(client, admin, tenant):
     inv_old = client.get(f"/api/tenants/{t}/inventory?collection_id={oldest_id}").json()
     selected = {c["account_id"]: c["id"] for c in inv_old["collections"]}
     assert selected["123456789012"] == oldest_id
+
+
+def test_finops_and_well_architected_findings(client, admin, tenant):
+    t = tenant["id"]
+    login(client, admin["email"], admin["password"])
+    p = json.load(open(FIXTURES / "mock-123456789012.json"))
+    p["collected_at"] = "2099-03-01T00:00:00+00:00"
+    p["global"]["finops"] = {
+        "compute_optimizer": {
+            "ec2": [{"id": "i-abc123", "name": "app-old", "finding": "OVER_PROVISIONED", "current": "m5.xlarge", "recommended": "m5.large", "savings_usd": 65.5}],
+            "ebs": [],
+            "lambda": [],
+        },
+        "savings_plans": {"type": "COMPUTE_SP (1 ano, No Upfront)", "estimated_monthly_savings_usd": 120.0, "estimated_savings_pct": 22.0, "hourly_commitment": "0.50"},
+        "well_architected": [{"workload": "core-prod", "lens": "wellarchitected", "high": 2, "medium": 3}],
+    }
+    r = client.post(f"/api/tenants/{t}/collections/upload", files=[("files", ("finops.json", json.dumps(p).encode(), "application/json"))], headers=H)
+    assert r.status_code == 200, r.text
+
+    titles = {f["title"] for f in client.get(f"/api/tenants/{t}/findings").json()["findings"]}
+    assert "[COST06] Volume EBS gp2 (migrar para gp3)" in titles
+    assert "[COST07] Bucket S3 sem política de Lifecycle" in titles
+    assert "[COST06] Compute Optimizer: EC2 superdimensionada" in titles
+    assert "[COST08] Oportunidade de Savings Plans" in titles
+    assert "Workload com riscos no AWS Well-Architected Tool" in titles
+
+    cfg = client.get(f"/api/tenants/{t}/ai/config").json()
+    assert cfg["stats"]["estimated_monthly_savings_usd"] >= 185.5

@@ -334,11 +334,19 @@ def compute(payloads: list[dict]) -> list[dict]:
             F("low", "Operação", "Instância fora do SSM", i, "ec2", "Instale/atualize o SSM Agent e anexe um instance profile com AmazonSSMManagedInstanceCore para acesso e patching sem portas abertas.", f"status SSM: {i.get('ssm')}")
         if i.get("public_ip") and i.get("state") == "running":
             F("info", "Exposição", "Instância com IP público", i, "ec2", "Confirme se a exposição direta é necessária; prefira LB/NAT e acesso via SSM.", i.get("public_ip"))
+        if i.get("state") == "running" and str(i.get("type") or "").startswith(("t2.", "m4.", "c4.", "r4.")):
+            F("low", "Custo", "[COST06] EC2 em geração antiga", i, "ec2",
+              "Avalie migrar para gerações atuais (t3/t3a, m6i/m7i, c6i, r6i) ou Graviton (t4g/m7g) para melhor custo-benefício.",
+              str(i.get("type")))
     for v in inv.rows("ebs"):
         if v.get("encrypted") is False:
             F("medium", "Segurança", "Volume EBS sem criptografia", v, "ebs", "Habilite \"EBS encryption by default\" na região e migre o volume via snapshot criptografado.")
         if v.get("state") == "available":
             F("low", "Custo", "Volume EBS não anexado", v, "ebs", "Volume órfão gera custo contínuo. Faça snapshot e exclua se não houver uso.", f"{v.get('size_gb')} GB {v.get('type')}")
+        if v.get("type") == "gp2":
+            F("low", "Custo", "[COST06] Volume EBS gp2 (migrar para gp3)", v, "ebs",
+              "Volumes gp3 custam ~20% menos por GB que gp2 e já entregam 3.000 IOPS sem downtime na conversão.",
+              f"{v.get('size_gb')} GB gp2")
     for e in inv.rows("eip"):
         if not e.get("associated"):
             F("low", "Custo", "IP elástico sem associação", {**e, "id": e.get("allocation_id") or e.get("ip")}, "eip", "IPs públicos IPv4 são cobrados por hora. Libere os que não estão em uso.", e.get("ip") or "")
@@ -355,6 +363,10 @@ def compute(payloads: list[dict]) -> list[dict]:
             F("medium", "Resiliência", "RDS de produção sem Multi-AZ", d, "rds", "Habilite Multi-AZ para failover automático em falha de AZ.")
         if d.get("deletion_protection") is False and prd.search(str(d.get("id"))):
             F("low", "Resiliência", "RDS de produção sem proteção contra exclusão", d, "rds", "Ative DeletionProtection.")
+        if str(d.get("class") or "").startswith(("db.t2.", "db.m4.", "db.r4.")):
+            F("low", "Custo", "[COST06] RDS em geração antiga", d, "rds",
+              "Avalie atualizar para classes atuais (db.t3/db.t4g/db.m6g/db.r6g) com maior performance por dólar.",
+              str(d.get("class")))
     for c in inv.rows("aurora"):
         if c.get("encrypted") is False:
             F("medium", "Segurança", "Cluster de banco sem criptografia", c, "aurora", "Restaure a partir de snapshot com criptografia KMS.")
@@ -373,6 +385,10 @@ def compute(payloads: list[dict]) -> list[dict]:
             F("critical", "Segurança", "Bucket S3 público por política", b, "s3", "Revise a bucket policy. Se o conteúdo precisa ser público, sirva via CloudFront com OAC.")
         elif b.get("public_access_blocked") is False and not acct_pab:
             F("medium", "Segurança", "Bucket S3 sem Block Public Access", b, "s3", "Ative o Block Public Access no bucket ou, melhor, no nível da conta.")
+        if b.get("lifecycle") is False:
+            F("low", "Custo", "[COST07] Bucket S3 sem política de Lifecycle", b, "s3",
+              "Configure regras de Lifecycle (Intelligent-Tiering, Glacier ou expiração de versões antigas) para evitar custo contínuo em S3 Standard.",
+              f"{b.get('size_gb', 0)} GB")
     # serverless / containers
     for f in inv.rows("lambda"):
         if f.get("runtime") and RULES["deprecated_runtimes"].search(str(f["runtime"])):
@@ -479,6 +495,50 @@ def compute(payloads: list[dict]) -> list[dict]:
             if alarming:
                 F("info", "Operação", "Alarmes do CloudWatch em estado ALARM", {"_a": a["id"], "_r": r, "id": r, "name": f"{len(alarming)} alarmes"}, "alarm",
                   "Revise se são alarmes reais ou ruído a ajustar.", ", ".join(x.get("name") or "" for x in alarming[:5]))
+            snaps = d.get("ebs_snapshots_summary") or {}
+            if (snaps.get("older_than_365d") or 0) > 0:
+                F("low", "Custo", "[COST07] Snapshots EBS com mais de 1 ano", {"_a": a["id"], "_r": r, "id": r, "name": f"{snaps['older_than_365d']} snapshots"}, "snapshot",
+                  "Revise retenção via Data Lifecycle Manager (DLM) ou AWS Backup e remova snapshots obsoletos.",
+                  f"{snaps['older_than_365d']} antigo(s) · total {snaps.get('total_gb', 0)} GB")
+            for vpc in d.get("vpcs") or []:
+                if vpc.get("nat_gws"):
+                    has_gw_ep = any("s3" in str(ep.get("service") or "") or "dynamodb" in str(ep.get("service") or "") for ep in (vpc.get("endpoints") or []))
+                    if not has_gw_ep:
+                        F("low", "Custo", "[COST05] VPC com NAT Gateway sem Gateway Endpoint",
+                          {"_a": a["id"], "_r": r, "id": vpc.get("vpc_id"), "name": vpc.get("name") or vpc.get("vpc_id")}, "vpc",
+                          "Crie VPC Gateway Endpoints gratuitos para S3 e DynamoDB para evitar cobrança de tráfego por GB no NAT Gateway.",
+                          vpc.get("cidr") or "")
+        finops = (a.get("global") or {}).get("finops") or {}
+        co = finops.get("compute_optimizer") or {}
+        for rec in co.get("ec2") or []:
+            sav = rec.get("savings_usd") or 0
+            F("medium" if sav >= 20 else "low", "Custo", "[COST06] Compute Optimizer: EC2 superdimensionada",
+              {"_a": a["id"], "_r": "global", "id": rec.get("id"), "name": rec.get("name") or rec.get("id")}, "ec2",
+              f"Avalie redimensionar de {rec.get('current')} para {rec.get('recommended')}.",
+              f"{rec.get('current')} -> {rec.get('recommended')} · economia ~US$ {sav}/mês")
+        for rec in co.get("ebs") or []:
+            sav = rec.get("savings_usd") or 0
+            F("medium" if sav >= 20 else "low", "Custo", "[COST06] Compute Optimizer: EBS não otimizado",
+              {"_a": a["id"], "_r": "global", "id": rec.get("id"), "name": rec.get("id")}, "ebs",
+              f"Ajuste o volume de {rec.get('current')} para {rec.get('recommended')}.",
+              f"{rec.get('current')} -> {rec.get('recommended')} · economia ~US$ {sav}/mês")
+        for rec in co.get("lambda") or []:
+            sav = rec.get("savings_usd") or 0
+            F("low", "Custo", "[COST06] Compute Optimizer: Lambda não otimizada",
+              {"_a": a["id"], "_r": "global", "id": rec.get("id"), "name": rec.get("id")}, "lambda",
+              f"Ajuste a memória de {rec.get('current_mb')} MB para {rec.get('recommended_mb')} MB.",
+              f"economia ~US$ {sav}/mês")
+        sp = finops.get("savings_plans") or {}
+        if (sp.get("estimated_monthly_savings_usd") or 0) >= 10:
+            F("medium", "Custo", "[COST08] Oportunidade de Savings Plans", ab, "account",
+              f"Avalie {sp.get('type')} com compromisso de US$ {sp.get('hourly_commitment')}/h.",
+              f"economia ~US$ {sp.get('estimated_monthly_savings_usd')}/mês ({sp.get('estimated_savings_pct')}%)")
+        for wa in finops.get("well_architected") or []:
+            sev = "high" if (wa.get("high") or 0) > 0 else "medium"
+            F(sev, "Well-Architected", "Workload com riscos no AWS Well-Architected Tool",
+              {"_a": a["id"], "_r": "global", "id": f"{wa.get('workload')}|{wa.get('lens')}", "name": wa.get("workload")}, "well_architected",
+              "Revise os High/Medium Risk Issues no console do AWS Well-Architected Tool.",
+              f"lens {wa.get('lens')} · {wa.get('high', 0)} alto(s), {wa.get('medium', 0)} médio(s)")
         dd = days(a["collected_at"])
         if dd is not None and dd > RULES["stale_days"]:
             F("info", "Governança", "Inventário desatualizado", ab, "account", "Rode o coletor novamente para atualizar a documentação.", f"coletado há {dd} dias")

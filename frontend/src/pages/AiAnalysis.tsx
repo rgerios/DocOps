@@ -30,9 +30,9 @@ interface Msg {
 
 const QUICK_PROMPTS = [
   'Quantas instâncias EC2 tenho em todo o ambiente, separadas por conta, região, tipo e estado (running/stopped)?',
+  'Quais são os principais alvos de economia financeira (FinOps / Well-Architected: gp2→gp3, gerações antigas, Compute Optimizer, Savings Plans, S3 lifecycle)?',
   'Faça um resumo executivo completo da infraestrutura (VPCs, EC2, RDS, S3, Lambdas, EKS/ECS e custos).',
   'Quais são os principais riscos de segurança abertos e por onde devo começar a tratar?',
-  'Existem recursos ociosos, parados, públicos indevidamente ou sem criptografia/backup?',
 ]
 
 export default function AiAnalysis() {
@@ -154,6 +154,9 @@ export default function AiAnalysis() {
           <div className="kpi"><span>VPCs / Subnets</span><b>{s.vpcs ?? 0} / {s.subnets ?? 0}</b></div>
           <div className="kpi"><span>Buckets S3</span><b>{s.s3_buckets ?? 0}</b></div>
           <div className="kpi"><span>Achados abertos</span><b>{s.findings_open ?? 0}</b></div>
+          {(s.estimated_monthly_savings_usd ?? 0) > 0 && (
+            <div className="kpi"><span>Economia FinOps est.</span><b>US$ {s.estimated_monthly_savings_usd}</b><small>por mês (AWS)</small></div>
+          )}
         </div>
       )}
 

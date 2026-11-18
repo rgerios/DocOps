@@ -1254,6 +1254,94 @@ def col_cost(A):
     return out
 
 
+def col_finops(A):
+    """Recomendações FinOps (Compute Optimizer, Cost Explorer) e riscos do Well-Architected Tool."""
+    out = {"compute_optimizer": {"ec2": [], "ebs": [], "lambda": []}, "savings_plans": None, "well_architected": []}
+    home = A.opts.home_region or "us-east-1"
+    quiet_co = ("OptInRequiredException", "AccessDeniedException", "InvalidInputException")
+
+    co = A.c("compute-optimizer", home)
+    ec2_recs = A.safe(home, "co:ec2", lambda: co.get_ec2_instance_recommendations(maxResults=100).get("instanceRecommendations", []), [], quiet=quiet_co)
+    for r in ec2_recs:
+        if r.get("finding") not in ("OVER_PROVISIONED", "UNDER_PROVISIONED"):
+            continue
+        opts = r.get("recommendationOptions") or []
+        best = opts[0] if opts else {}
+        sav = (best.get("estimatedMonthlySavings") or {})
+        out["compute_optimizer"]["ec2"].append({
+            "id": (r.get("instanceArn") or "").split("/")[-1],
+            "name": r.get("instanceName") or "",
+            "finding": r.get("finding"),
+            "current": r.get("currentInstanceType"),
+            "recommended": best.get("instanceType"),
+            "savings_usd": round(float(sav.get("value", 0) or 0), 2),
+        })
+
+    ebs_recs = A.safe(home, "co:ebs", lambda: co.get_ebs_volume_recommendations(maxResults=100).get("volumeRecommendations", []), [], quiet=quiet_co)
+    for r in ebs_recs:
+        if r.get("finding") != "NotOptimized":
+            continue
+        cur = r.get("currentConfiguration") or {}
+        opts = r.get("volumeRecommendationOptions") or []
+        best = opts[0] if opts else {}
+        cfg = best.get("configuration") or {}
+        sav = best.get("estimatedMonthlySavings") or {}
+        out["compute_optimizer"]["ebs"].append({
+            "id": (r.get("volumeArn") or "").split("/")[-1],
+            "current": f"{cur.get('volumeType', '')} {cur.get('volumeSize', '')}GB",
+            "recommended": f"{cfg.get('volumeType', '')} {cfg.get('volumeSize', '')}GB",
+            "savings_usd": round(float(sav.get("value", 0) or 0), 2),
+        })
+
+    lmb_recs = A.safe(home, "co:lambda", lambda: co.get_lambda_function_recommendations(maxResults=100).get("lambdaFunctionRecommendations", []), [], quiet=quiet_co)
+    for r in lmb_recs:
+        if r.get("finding") != "NotOptimized":
+            continue
+        opts = r.get("memorySizeRecommendationOptions") or []
+        best = opts[0] if opts else {}
+        sav = best.get("estimatedMonthlySavings") or {}
+        out["compute_optimizer"]["lambda"].append({
+            "id": (r.get("functionArn") or "").split(":")[-2] if ":" in (r.get("functionArn") or "") else r.get("functionArn"),
+            "current_mb": r.get("currentMemorySize"),
+            "recommended_mb": best.get("memorySize"),
+            "savings_usd": round(float(sav.get("value", 0) or 0), 2),
+        })
+
+    if not A.opts.no_cost:
+        ce = A.c("ce", "us-east-1")
+        sp = A.safe("global", "ce:sp_rec", lambda: ce.get_savings_plans_purchase_recommendation(
+            SavingsPlansType="COMPUTE_SP", TermInYears="ONE_YEAR", PaymentOption="NO_UPFRONT", LookbackPeriodInDays="THIRTY_DAYS"
+        ).get("SavingsPlansPurchaseRecommendation", {}), None, quiet=("DataUnavailableException", "AccessDeniedException"))
+        if sp and sp.get("SavingsPlansPurchaseRecommendationSummary"):
+            s = sp["SavingsPlansPurchaseRecommendationSummary"]
+            out["savings_plans"] = {
+                "type": "COMPUTE_SP (1 ano, No Upfront)",
+                "estimated_monthly_savings_usd": round(float(s.get("EstimatedMonthlySavingsAmount", 0) or 0), 2),
+                "estimated_savings_pct": round(float(s.get("EstimatedSavingsPercentage", 0) or 0), 1),
+                "hourly_commitment": s.get("HourlyCommitmentToPurchase"),
+            }
+
+    wa = A.c("wellarchitected", home)
+    wls = A.safe(home, "wa:workloads", lambda: wa.list_workloads(MaxResults=20).get("WorkloadSummaries", []), [],
+                 quiet=("AccessDeniedException", "ValidationException"))
+    for w in wls[:10]:
+        wid = w.get("WorkloadId")
+        if not wid:
+            continue
+        revs = A.safe(home, "wa:reviews", lambda wid=wid: wa.list_lens_reviews(WorkloadId=wid).get("LensReviewSummaries", []), [],
+                      quiet=("AccessDeniedException", "ResourceNotFoundException"))
+        for rv in revs:
+            rc = rv.get("RiskCounts") or {}
+            if rc.get("HIGH", 0) or rc.get("MEDIUM", 0):
+                out["well_architected"].append({
+                    "workload": w.get("WorkloadName"),
+                    "lens": rv.get("LensAlias"),
+                    "high": rc.get("HIGH", 0),
+                    "medium": rc.get("MEDIUM", 0),
+                })
+    return out
+
+
 def col_globals(A):
     g = {}
 
@@ -1293,6 +1381,7 @@ def col_globals(A):
                      "forecast": float(((b.get("CalculatedSpend") or {}).get("ForecastedSpend") or {}).get("Amount", 0) or 0)} for b in bl]
     if not A.opts.no_cost:
         step("Cost Explorer", "cost", col_cost, None)
+    step("FinOps / Well-Architected", "finops", col_finops, {})
     return g
 
 

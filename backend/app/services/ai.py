@@ -80,6 +80,7 @@ def build_inventory_context(db: Session, tenant: Tenant) -> tuple[dict[str, Any]
         "iam_roles": 0,
         "ebs_volumes": 0,
         "findings_open": 0,
+        "estimated_monthly_savings_usd": 0.0,
     }
     accounts_ctx = []
 
@@ -144,6 +145,14 @@ def build_inventory_context(db: Session, tenant: Tenant) -> tuple[dict[str, Any]
             }
 
         cost = glob.get("cost") or {}
+        finops = glob.get("finops") or {}
+        co = finops.get("compute_optimizer") or {}
+        sp = finops.get("savings_plans") or {}
+        acc_savings = (
+            sum(r.get("savings_usd") or 0 for k in ("ec2", "ebs", "lambda") for r in (co.get(k) or []))
+            + (sp.get("estimated_monthly_savings_usd") or 0)
+        )
+        totals["estimated_monthly_savings_usd"] = round(totals["estimated_monthly_savings_usd"] + acc_savings, 2)
         accounts_ctx.append({
             "account_id": acc_info.get("id") or col.account_id,
             "alias": acc_info.get("alias") or col.alias,
@@ -153,8 +162,9 @@ def build_inventory_context(db: Session, tenant: Tenant) -> tuple[dict[str, Any]
             "iam_roles_count": len(roles),
             "root_mfa": (iam.get("root") or {}).get("mfa"),
             "s3_count": len(s3),
-            "s3_buckets": [{"name": b.get("name"), "region": b.get("region"), "public_blocked": b.get("public_access_blocked"), "size_gb": b.get("size_gb")} for b in s3[:40]],
+            "s3_buckets": [{"name": b.get("name"), "region": b.get("region"), "public_blocked": b.get("public_access_blocked"), "lifecycle": b.get("lifecycle"), "size_gb": b.get("size_gb")} for b in s3[:40]],
             "cost": {"currency": cost.get("currency"), "mtd": cost.get("mtd"), "forecast": cost.get("forecast"), "by_service": dict(list((cost.get("by_service") or {}).items())[:12])},
+            "finops": finops,
             "regions": regions_ctx,
         })
 
