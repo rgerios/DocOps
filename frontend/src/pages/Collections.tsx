@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { ago, api, can, downloadBlob, fmtDT, type CollectionRow } from '../api'
 import { useTenant } from '../App'
-import { Btn, Card, Empty, ErrorBox, Modal, PageHead, Pill, StatusPill, useConfirm, useLoad, useToast } from '../ui'
+import { Btn, Card, Empty, ErrorBox, Field, Modal, PageHead, Pill, StatusPill, useConfirm, useLoad, useToast } from '../ui'
 
 const CHANGE: Record<string, [string, string]> = { added: ['novo', 'ok'], removed: ['removido', 'bad'], changed: ['alterado', 'warn'] }
 const TRIGGER: Record<string, string> = { manual: 'manual', schedule: 'agendada', upload: 'arquivo' }
@@ -11,6 +11,7 @@ export default function Collections() {
   const toast = useToast()
   const [acct, setAcct] = useState('')
   const [open, setOpen] = useState<number | null>(null)
+  const [guide, setGuide] = useState(false)
   const [busy, setBusy] = useState(false)
   const file = useRef<HTMLInputElement>(null)
   const { data, error, reload } = useLoad<CollectionRow[]>(
@@ -38,10 +39,14 @@ export default function Collections() {
   return (
     <div className="page">
       <PageHead title="Coletas" sub="Histórico de inventários de cada conta. A coleta mais recente de cada conta alimenta o Explorer; cada nova coleta é comparada com a anterior."
-        actions={can(role, 'analyst') && <>
-          <input ref={file} type="file" multiple accept=".json,.gz" hidden onChange={(e) => upload(e.target.files)} />
-          <Btn busy={busy} onClick={() => file.current?.click()}>Importar arquivo do coletor</Btn>
-          <Btn kind="primary" onClick={collectAll}>Coletar todas as contas</Btn>
+        actions={<>
+          <Btn onClick={() => setGuide(true)}>Como coletar (CloudShell)</Btn>
+          <a className="btn" href="/docviva_collector.py" download="docviva_collector.py">Baixar coletor.py</a>
+          {can(role, 'analyst') && <>
+            <input ref={file} type="file" multiple accept=".json,.gz" hidden onChange={(e) => upload(e.target.files)} />
+            <Btn busy={busy} onClick={() => file.current?.click()}>Importar arquivo do coletor</Btn>
+            <Btn kind="primary" onClick={collectAll}>Coletar todas as contas</Btn>
+          </>}
         </>} />
       <ErrorBox error={error} />
       <Card title="Execuções" actions={accounts.length > 1 && (
@@ -69,6 +74,7 @@ export default function Collections() {
           </table>)}
       </Card>
       {open && <Detail tenantId={tenant.id} id={open} canDelete={can(role, 'admin')} onClose={() => setOpen(null)} onDeleted={() => { setOpen(null); reload() }} />}
+      {guide && <CollectorGuide onClose={() => setGuide(false)} />}
     </div>
   )
 }
@@ -122,6 +128,54 @@ function Detail({ tenantId, id, canDelete, onClose, onDeleted }: { tenantId: num
             </table>)}
         </>)}
       </>}
+    </Modal>
+  )
+}
+
+function CollectorGuide({ onClose }: { onClose: () => void }) {
+  const toast = useToast()
+  const [alias, setAlias] = useState('producao')
+  const [noCost, setNoCost] = useState(false)
+  const cleanAlias = alias.trim().replace(/[^a-zA-Z0-9._-]+/g, '-') || 'conta'
+  const outFile = `docviva_${cleanAlias}.json.gz`
+  const flags = `--alias ${cleanAlias} --gzip${noCost ? ' --no-cost' : ''} -o ${outFile}`
+  const cmdUpload = `python3 docviva_collector.py ${flags}`
+  const cmdCurl = `curl -sSL https://raw.githubusercontent.com/rgerios/DocOps/main/scripts/docviva_collector.py -o docviva_collector.py && \\\npython3 docviva_collector.py ${flags}`
+  const copy = (txt: string) => { navigator.clipboard?.writeText(txt); toast('Comando copiado') }
+
+  return (
+    <Modal title="Como fazer a coleta (Automática ou CloudShell)" onClose={onClose} wide footer={<>
+      <a className="btn" href="/docviva_collector.py" download="docviva_collector.py">Baixar docviva_collector.py</a>
+      <Btn kind="primary" onClick={onClose}>Fechar</Btn>
+    </>}>
+      <div className="alert info">
+        <b>Existem duas formas de coletar o inventário AWS:</b>
+        <ul style={{ marginLeft: 18, marginTop: 6 }}>
+          <li><b>Automática (com Role):</b> cadastre a conta com a role <code>DocVivaReadOnly</code> em <b>Contas AWS</b> e clique em <b>Coletar todas as contas</b> (ou configure em <b>Agendamentos</b>).</li>
+          <li><b>Manual no AWS CloudShell (contas sem role):</b> baixe o script <code>docviva_collector.py</code>, envie para a sessão do CloudShell, execute o comando abaixo e importe o arquivo gerado aqui em <b>Importar arquivo do coletor</b>.</li>
+        </ul>
+      </div>
+
+      <div className="grid2">
+        <Field label="Nome da conta (alias)" hint="Atualiza os comandos abaixo automaticamente.">
+          <input value={alias} onChange={(e) => setAlias(e.target.value)} placeholder="producao" />
+        </Field>
+        <div style={{ display: 'flex', alignItems: 'center', paddingTop: 18 }}>
+          <label className="check"><input type="checkbox" checked={noCost} onChange={(e) => setNoCost(e.target.checked)} /> Pular Cost Explorer (<code>--no-cost</code>, evita US$ 0,03 por coleta)</label>
+        </div>
+      </div>
+
+      <p><b>Passo 1 — Enviar o coletor para o CloudShell</b></p>
+      <p className="muted small">Clique em <b>Baixar docviva_collector.py</b> abaixo (ou no topo da página). No Console AWS, abra o <b>CloudShell</b> (ícone <code>&gt;_</code> no topo), clique em <b>Actions → Upload file</b> e selecione o arquivo baixado.</p>
+
+      <p><b>Passo 2 — Executar no CloudShell (copiar e colar)</b></p>
+      <pre className="code">{cmdUpload}<button className="copy" onClick={() => copy(cmdUpload)}>copiar</button></pre>
+
+      <p className="muted small">Se preferir baixar direto pelo CloudShell sem fazer upload manual, use:</p>
+      <pre className="code">{cmdCurl}<button className="copy" onClick={() => copy(cmdCurl)}>copiar</button></pre>
+
+      <p><b>Passo 3 — Baixar o JSON e importar no DocOps</b></p>
+      <p className="muted small">Ao finalizar, no CloudShell clique em <b>Actions → Download file</b>, informe <code>/home/cloudshell-user/{outFile}</code> (ou apenas <code>{outFile}</code>) e importe o arquivo clicando em <b>Importar arquivo do coletor</b>.</p>
     </Modal>
   )
 }
