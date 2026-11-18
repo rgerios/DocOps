@@ -275,3 +275,10 @@ def test_finops_and_well_architected_findings(client, admin, tenant):
 
     cfg = client.get(f"/api/tenants/{t}/ai/config").json()
     assert cfg["stats"]["estimated_monthly_savings_usd"] >= 185.5
+
+    fo = client.get(f"/api/tenants/{t}/finops").json()
+    assert fo["summary"]["estimated_monthly_savings_usd"] >= 185.5
+    assert any(f["cat"] == "Custo" for f in fo["findings"])
+
+    rec = client.post(f"/api/tenants/{t}/findings/recompute", headers=H)
+    assert rec.status_code == 200

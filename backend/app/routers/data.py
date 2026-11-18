@@ -91,6 +91,115 @@ def findings(c: Ctx = Depends(tenant_ctx("client"))):
     return {"computed_at": st.computed_at if st else None, "findings": found}
 
 
+@router.post("/findings/recompute")
+def recompute_findings(c: Ctx = Depends(tenant_ctx("analyst"))):
+    """Recalcula os achados (incluindo regras FinOps/Well-Architected) sobre as coletas vigentes."""
+    pipeline.refresh_findings(c.db, c.tenant.id)
+    c.audit("findings.recomputed")
+    return findings(c)
+
+
+@router.get("/finops")
+def finops_overview(c: Ctx = Depends(tenant_ctx("viewer"))):
+    """Resumo financeiro, alvos Well-Architected (COST05-COST08) e achados de custo do cliente."""
+    cols = pipeline.latest_collections(c.db, c.tenant.id)
+    st = c.db.get(TenantState, c.tenant.id)
+    notes = {n.key.split("|", 1)[1]: n.data for n in c.db.scalars(select(Note).where(Note.tenant_id == c.tenant.id, Note.key.like("finding|%")))}
+
+    finops_findings = []
+    for f in (st.findings if st else []):
+        if f.get("cat") not in ("Custo", "Well-Architected"):
+            continue
+        item = dict(f)
+        n = notes.get(item["id"]) or {}
+        item["status"], item["owner"], item["note"] = n.get("status", "aberto"), n.get("owner"), n.get("text")
+        finops_findings.append(item)
+
+    summary = {
+        "accounts": 0,
+        "estimated_monthly_savings_usd": 0.0,
+        "mtd_cost_usd": 0.0,
+        "forecast_cost_usd": 0.0,
+        "gp2_volumes": 0,
+        "unattached_ebs": 0,
+        "unused_eips": 0,
+        "old_gen_ec2": 0,
+        "old_gen_rds": 0,
+        "s3_no_lifecycle": 0,
+        "old_snapshots": 0,
+        "nat_no_endpoint": 0,
+        "well_architected_risks": 0,
+    }
+    accounts_cost = []
+
+    for col in cols:
+        p = col.payload or {}
+        if not p:
+            continue
+        summary["accounts"] += 1
+        glob = p.get("global") or {}
+        cost = glob.get("cost") or {}
+        fin = glob.get("finops") or {}
+        co = fin.get("compute_optimizer") or {}
+        sp = fin.get("savings_plans") or {}
+        wa = fin.get("well_architected") or []
+
+        mtd = float(cost.get("mtd") or 0)
+        fc = float(cost.get("forecast") or 0)
+        summary["mtd_cost_usd"] = round(summary["mtd_cost_usd"] + mtd, 2)
+        summary["forecast_cost_usd"] = round(summary["forecast_cost_usd"] + fc, 2)
+
+        co_recs = [r for k in ("ec2", "ebs", "lambda") for r in (co.get(k) or [])]
+        acc_sav = sum(float(r.get("savings_usd") or 0) for r in co_recs) + float(sp.get("estimated_monthly_savings_usd") or 0)
+        summary["estimated_monthly_savings_usd"] = round(summary["estimated_monthly_savings_usd"] + acc_sav, 2)
+        summary["well_architected_risks"] += sum((w.get("high") or 0) + (w.get("medium") or 0) for w in wa)
+
+        for b in glob.get("s3") or []:
+            if b.get("lifecycle") is False:
+                summary["s3_no_lifecycle"] += 1
+
+        for rdata in (p.get("regions") or {}).values():
+            for v in rdata.get("ebs_volumes") or []:
+                if v.get("type") == "gp2":
+                    summary["gp2_volumes"] += 1
+                if v.get("state") == "available":
+                    summary["unattached_ebs"] += 1
+            for e in rdata.get("eips") or []:
+                if not e.get("associated"):
+                    summary["unused_eips"] += 1
+            for i in rdata.get("ec2") or []:
+                if i.get("state") == "running" and str(i.get("type") or "").startswith(("t2.", "m4.", "c4.", "r4.")):
+                    summary["old_gen_ec2"] += 1
+            for d in rdata.get("rds") or []:
+                if str(d.get("class") or "").startswith(("db.t2.", "db.m4.", "db.r4.")):
+                    summary["old_gen_rds"] += 1
+            summary["old_snapshots"] += int((rdata.get("ebs_snapshots_summary") or {}).get("older_than_365d") or 0)
+            for vpc in rdata.get("vpcs") or []:
+                if vpc.get("nat_gws"):
+                    has_gw = any("s3" in str(ep.get("service") or "") or "dynamodb" in str(ep.get("service") or "") for ep in (vpc.get("endpoints") or []))
+                    if not has_gw:
+                        summary["nat_no_endpoint"] += 1
+
+        accounts_cost.append({
+            "account_id": col.account_id,
+            "alias": col.alias,
+            "currency": cost.get("currency") or "USD",
+            "mtd": cost.get("mtd"),
+            "forecast": cost.get("forecast"),
+            "estimated_savings_usd": round(acc_sav, 2),
+            "co_count": len(co_recs),
+            "savings_plans": sp or None,
+            "well_architected": wa,
+        })
+
+    return {
+        "computed_at": st.computed_at if st else None,
+        "summary": summary,
+        "accounts": accounts_cost,
+        "findings": finops_findings,
+    }
+
+
 class NotesIn(BaseModel):
     changes: dict[str, dict | None]  # chave -> dados (None apaga)
 
