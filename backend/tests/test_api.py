@@ -194,3 +194,41 @@ def test_mfa_lockout_and_secret_validation(client, monkeypatch):
         raise AssertionError("Esperava RuntimeError para SECRET_KEY padrão em produção")
     except RuntimeError:
         pass
+
+
+def test_ai_analysis_config_and_ask(client, admin, tenant, monkeypatch):
+    t = tenant["id"]
+    login(client, admin["email"], admin["password"])
+
+    r = client.put(
+        f"/api/tenants/{t}/ai/config",
+        json={"provider": "openrouter", "model": "openai/gpt-4o-mini", "api_key": "sk-or-v1-segredo-123456"},
+        headers=H,
+    )
+    assert r.status_code == 200, r.text
+    cfg = r.json()
+    assert cfg["provider"] == "openrouter"
+    assert cfg["api_key_configured"] is True
+    assert "segredo" not in (cfg["api_key_hint"] or "")
+    assert cfg["stats"]["ec2_total"] >= 2
+
+    captured = {}
+
+    def fake_post(url, headers=None, params=None, json=None, timeout=None):
+        captured["url"] = url
+        captured["json"] = json
+        return type("R", (), {
+            "status_code": 200,
+            "text": "",
+            "json": lambda self: {"choices": [{"message": {"content": "Você possui 2 instâncias EC2 ativas."}}]},
+        })()
+
+    monkeypatch.setattr("app.services.ai.httpx.post", fake_post)
+    r = client.post(
+        f"/api/tenants/{t}/ai/ask",
+        json={"question": "Quantas instâncias EC2 tenho no ambiente?"},
+        headers=H,
+    )
+    assert r.status_code == 200, r.text
+    assert "2 instâncias EC2" in r.json()["answer"]
+    assert '"ec2_total":' in captured["json"]["messages"][0]["content"]

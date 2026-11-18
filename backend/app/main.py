@@ -9,7 +9,7 @@ from . import models  # noqa: F401  (registra as tabelas)
 from .config import settings
 from .db import Base, SessionLocal, engine
 from .models import User
-from .routers import accounts, auth, data, ops, tenants
+from .routers import accounts, ai, auth, data, ops, tenants
 from .security import hash_password, password_problems
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -38,7 +38,7 @@ async def guard(request: Request, call_next):
     return resp
 
 
-for r in (auth.router, tenants.router, accounts.router, data.router, ops.router):
+for r in (auth.router, tenants.router, accounts.router, data.router, ops.router, ai.router):
     app.include_router(r)
 
 

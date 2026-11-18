@@ -133,6 +133,18 @@ class TenantSetting(Base):
     alert_on_changes: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class TenantAIConfig(Base):
+    """Configuração de provedor de IA por cliente."""
+    __tablename__ = "tenant_ai_configs"
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), default="gpt")
+    model: Mapped[str] = mapped_column(String(120), default="gpt-4o-mini")
+    base_url: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
 class Schedule(Base):
     __tablename__ = "schedules"
     id: Mapped[int] = mapped_column(primary_key=True)
