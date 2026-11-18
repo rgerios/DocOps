@@ -31,7 +31,10 @@ export default function Accounts() {
   return (
     <div className="page">
       <PageHead title="Contas AWS" sub="Contas inventariadas deste cliente. Com uma role de leitura (DocVivaReadOnly) o servidor coleta sozinho; sem role, a conta aceita só importação de arquivo."
-        actions={admin && <Btn kind="primary" onClick={() => setEdit({ active: true, environment: '' })}>Adicionar conta</Btn>} />
+        actions={admin && <>
+          <a className="btn" href={`/assumerole.html?tenant_id=${tenant.id}`} target="_blank" rel="noopener noreferrer">Assistente Assume Role ↗</a>
+          <Btn kind="primary" onClick={() => setEdit({ active: true, environment: '' })}>Adicionar conta</Btn>
+        </>} />
       <ErrorBox error={error} />
       <Card pad={false}>
         {!data ? <div className="pad muted">Carregando…</div> : !data.length ? <Empty title="Nenhuma conta cadastrada">Adicione uma conta com a role de coleta ou importe um arquivo em <b>Coletas</b> (a conta é cadastrada automaticamente).</Empty> : (

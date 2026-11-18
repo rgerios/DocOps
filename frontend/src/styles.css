@@ -75,8 +75,8 @@ code, .mono { font-family: var(--mono); font-size: 12px }
 .user-pop { position: absolute; right: 0; top: 42px; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(30, 43, 33, .16); padding: 6px; width: 250px }
 .user-pop .who { padding: 8px 10px 10px; border-bottom: 1px solid var(--line-2); margin-bottom: 4px }
 .user-pop .who b { display: block } .user-pop .who span { font-size: 12px; color: var(--muted) }
-.user-pop button { display: block; width: 100%; text-align: left; padding: 8px 10px; border-radius: 8px }
-.user-pop button:hover { background: var(--pastel-50) }
+.user-pop button, .user-pop a { display: block; width: 100%; text-align: left; padding: 8px 10px; border-radius: 8px; text-decoration: none; color: inherit }
+.user-pop button:hover, .user-pop a:hover { background: var(--pastel-50) }
 .main { flex: 1 }
 .main.full { display: flex }
 

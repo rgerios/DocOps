@@ -1,0 +1,46 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "DocOps / DocViva - Role IAM somente leitura para inventario de infraestrutura AWS"
+
+Parameters:
+  PrincipalArn:
+    Type: String
+    Description: "ARN da role ou usuario IAM do servidor DocOps autorizado a assumir esta role"
+  ExternalId:
+    Type: String
+    Description: "ExternalId exclusivo gerado pelo DocOps para proteger contra confused deputy"
+    MinLength: 8
+  RoleName:
+    Type: String
+    Default: "DocVivaReadOnly"
+    Description: "Nome da role IAM que sera criada nesta conta"
+
+Resources:
+  DocVivaReadOnlyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      Description: "Acesso somente leitura para inventario DocOps / DocViva"
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Ref PrincipalArn
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+
+Outputs:
+  RoleArn:
+    Description: "ARN da role criada (copie e envie/cole no DocOps)"
+    Value: !GetAtt DocVivaReadOnlyRole.Arn
+  AccountId:
+    Description: "ID da conta AWS"
+    Value: !Ref AWS::AccountId
+  ExternalId:
+    Description: "ExternalId configurado na trust policy"
+    Value: !Ref ExternalId

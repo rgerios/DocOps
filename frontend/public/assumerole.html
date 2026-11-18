@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <title>DocOps · Assistente Assume Role AWS</title>
+  <style>
+    :root {
+      --g-950: #132418; --g-900: #1a2f20; --g-800: #223d29; --g-700: #2e5236;
+      --brand: #5e8a42; --brand-600: #4a7a37; --pastel: #9cc47a; --pastel-300: #c4dcab; --pastel-100: #e4f0d8; --pastel-50: #f3f8ee;
+      --bg: #f5f7f2; --surface: #fff; --line: #e2e8dc; --line-2: #edf1e8;
+      --ink: #1e2b21; --ink-2: #465649; --muted: #768578;
+      --ok: #24804f; --ok-bg: #e5f4ec; --warn: #a87500; --warn-bg: #fdf6e1; --bad: #a8202a; --bad-bg: #fbe9ea; --blue: #2f6fc0; --blue-bg: #e9f1fc;
+      --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      --head: 'Montserrat', 'Inter', system-ui, sans-serif;
+      --mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+      --shadow: 0 1px 2px rgba(30, 43, 33, .05), 0 4px 16px rgba(30, 43, 33, .05);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font: 13.5px/1.5 var(--sans); color: var(--ink); background: var(--bg); min-height: 100vh; }
+    header.top {
+      height: 54px; background: var(--g-900); color: #fff; padding: 0 20px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand b { font: 700 15px var(--head); letter-spacing: -.01em; }
+    .brand span { font-size: 12px; color: #b7cbb9; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+    .pill.ok { background: var(--ok-bg); color: var(--ok); }
+    .pill.warn { background: var(--warn-bg); color: var(--warn); }
+    .pill.bad { background: var(--bad-bg); color: var(--bad); }
+    .pill.blue { background: var(--blue-bg); color: var(--blue); }
+
+    main { max-width: 1040px; margin: 24px auto; padding: 0 20px 48px; display: grid; gap: 16px; }
+    .head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+    .head h1 { font: 700 22px var(--head); }
+    .head p { color: var(--muted); margin-top: 3px; }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+    .card-h { padding: 13px 18px; border-bottom: 1px solid var(--line-2); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .card-h h2 { font: 600 14.5px var(--head); }
+    .card-b { padding: 18px; display: grid; gap: 14px; }
+
+    .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+
+    .field { display: grid; gap: 5px; }
+    .lbl { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+    .hint { font-size: 11.5px; color: var(--muted); }
+    input, select, textarea {
+      width: 100%; height: 36px; border: 1px solid var(--line); border-radius: 8px;
+      padding: 0 10px; background: #fff; font: inherit; color: inherit; outline: 0;
+    }
+    input:focus, select:focus { border-color: var(--brand); }
+    code, .mono { font-family: var(--mono); font-size: 12px; }
+
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .row > input, .row > select { flex: 1; min-width: 180px; }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      height: 36px; padding: 0 14px; border-radius: 9px; font: 500 12.5px var(--sans);
+      border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer;
+      text-decoration: none; white-space: nowrap;
+    }
+    .btn:hover:not(:disabled) { border-color: var(--pastel-300); background: var(--pastel-50); }
+    .btn.primary { background: var(--brand-600); border-color: var(--brand-600); color: #fff; }
+    .btn.primary:hover:not(:disabled) { background: var(--g-700); }
+    .btn:disabled { opacity: .55; cursor: default; }
+
+    .alert { padding: 11px 14px; border-radius: 9px; font-size: 12.5px; border: 1px solid transparent; }
+    .alert.info { background: var(--blue-bg); color: var(--blue); border-color: #c8dcf7; }
+    .alert.warn { background: var(--warn-bg); color: var(--warn); border-color: #f1dfa4; }
+    .alert.ok { background: var(--ok-bg); color: var(--ok); border-color: #bfe4ce; }
+    .alert.bad { background: var(--bad-bg); color: var(--bad); border-color: #f0c5c8; }
+
+    pre.code {
+      position: relative; background: #162319; color: #e8f1e6; padding: 14px 16px;
+      border-radius: 10px; overflow-x: auto; font: 12px/1.55 var(--mono); white-space: pre-wrap; word-break: break-all;
+    }
+    .url-box {
+      background: var(--pastel-50); border: 1px solid var(--pastel-300); border-radius: 10px;
+      padding: 12px 14px; font: 12px/1.5 var(--mono); word-break: break-all; color: var(--g-900);
+    }
+    .toast {
+      position: fixed; right: 18px; bottom: 18px; background: var(--g-900); color: #fff;
+      padding: 10px 14px; border-radius: 10px; font-size: 12.5px; box-shadow: var(--shadow);
+      opacity: 0; pointer-events: none; transition: opacity .15s ease;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <b>DocOps</b>
+      <span>Assistente de Onboarding · Assume Role AWS</span>
+    </div>
+    <div class="row">
+      <span id="authBadge" class="pill warn">Verificando sessão…</span>
+      <a class="btn" href="/">Voltar ao DocOps</a>
+    </div>
+  </header>
+
+  <main>
+    <div class="head">
+      <div>
+        <h1>Gerador de Link e Role AWS (ReadOnly)</h1>
+        <p>Gere a URL pronta para o cliente aceitar em 1 clique no Console AWS e devolver o <b>Role ARN</b> para cadastro imediato.</p>
+      </div>
+    </div>
+
+    <div id="authAlert" class="alert warn" style="display:none"></div>
+
+    <section class="card">
+      <div class="card-h">
+        <h2>1. Dados do ambiente e parâmetros da Role</h2>
+        <span id="awsBadge" class="pill blue">Detectando identidade AWS…</span>
+      </div>
+      <div class="card-b">
+        <div class="grid2">
+          <label class="field">
+            <span class="lbl">Cliente (Tenant)</span>
+            <select id="tenantId"></select>
+            <span class="hint">Cliente onde a conta será cadastrada.</span>
+          </label>
+          <label class="field">
+            <span class="lbl">Região AWS do Console</span>
+            <select id="region">
+              <option value="us-east-1">us-east-1 (N. Virginia)</option>
+              <option value="sa-east-1">sa-east-1 (São Paulo)</option>
+              <option value="us-east-2">us-east-2 (Ohio)</option>
+              <option value="us-west-2">us-west-2 (Oregon)</option>
+              <option value="eu-west-1">eu-west-1 (Irlanda)</option>
+            </select>
+            <span class="hint">Região usada para abrir a tela do CloudFormation.</span>
+          </label>
+        </div>
+
+        <div class="grid2">
+          <label class="field">
+            <span class="lbl">Principal ARN do servidor DocOps</span>
+            <input id="principalArn" placeholder="arn:aws:iam::CONTA_DO_SERVIDOR:role/ROLE_DO_SERVIDOR" />
+            <span id="principalHint" class="hint">Preenchido automaticamente quando o servidor possui credencial AWS.</span>
+          </label>
+          <label class="field">
+            <span class="lbl">Nome da Role na conta do cliente</span>
+            <input id="roleName" value="DocVivaReadOnly" />
+            <span class="hint">Padrão recomendado: <code>DocVivaReadOnly</code> (política <code>ReadOnlyAccess</code>).</span>
+          </label>
+        </div>
+
+        <div class="grid2">
+          <label class="field">
+            <span class="lbl">External ID (segredo compartilhado)</span>
+            <div class="row">
+              <input id="externalId" placeholder="Clique em Gerar ou informe um segredo" />
+              <button type="button" class="btn" id="btnGenExt">Gerar novo</button>
+            </div>
+            <span class="hint">Protege a trust policy contra uso indevido (confused deputy).</span>
+          </label>
+          <label class="field">
+            <span class="lbl">URL do Template CloudFormation (.yaml)</span>
+            <div class="row">
+              <input id="templateUrl" />
+              <a class="btn" href="/docviva-readonly-role.yaml" download="docviva-readonly-role.yaml">Baixar YAML</a>
+            </div>
+            <span class="hint">O Console AWS precisa acessar essa URL publicamente (GitHub Raw, S3 ou domínio público).</span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-h">
+        <h2>2. Link pronto para enviar ao cliente (CloudFormation Quick-Create)</h2>
+      </div>
+      <div class="card-b">
+        <p class="hint">Ao abrir este link logado na conta AWS de destino, o cliente só precisa marcar o aceite de criação de recursos IAM e clicar em <b>Create stack</b>. Ao finalizar, a aba <b>Outputs</b> exibirá o <code>RoleArn</code> pronto para retorno.</p>
+        <div id="quickUrlBox" class="url-box"></div>
+        <div class="row">
+          <a id="btnOpenQuick" class="btn primary" href="#" target="_blank" rel="noopener noreferrer">Abrir no Console AWS ↗</a>
+          <button type="button" class="btn" id="btnCopyQuick">Copiar URL para o cliente</button>
+          <button type="button" class="btn" id="btnCopyInvite">Copiar mensagem pronta (Teams / E-mail)</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-h">
+        <h2>3. Alternativa via AWS CloudShell (1 comando)</h2>
+      </div>
+      <div class="card-b">
+        <p class="hint">Se o cliente preferir rodar direto no <b>AWS CloudShell</b> (sem precisar de acesso externo ao template), copie o comando abaixo — ele já cria a role, anexa <code>ReadOnlyAccess</code> e imprime o <code>RoleArn</code> ao final.</p>
+        <pre id="cliBox" class="code"></pre>
+        <div class="row">
+          <button type="button" class="btn" id="btnCopyCli">Copiar comando CloudShell</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-h">
+        <h2>4. Retorno do cliente: cadastrar e testar a Role no DocOps</h2>
+      </div>
+      <div class="card-b">
+        <div class="grid2">
+          <label class="field">
+            <span class="lbl">Role ARN retornado pelo cliente</span>
+            <input id="returnedArn" placeholder="arn:aws:iam::123456789012:role/DocVivaReadOnly" />
+            <span class="hint">O Account ID (12 dígitos) é extraído automaticamente do ARN.</span>
+          </label>
+          <label class="field">
+            <span class="lbl">Apelido da conta (alias)</span>
+            <input id="accountAlias" placeholder="ex.: cliente-producao" />
+            <span class="hint">Nome amigável exibido no DocOps e no Explorer.</span>
+          </label>
+        </div>
+        <div class="grid2">
+          <label class="field">
+            <span class="lbl">Account ID</span>
+            <input id="accountId" maxlength="12" placeholder="123456789012" />
+          </label>
+          <label class="field">
+            <span class="lbl">Ambiente</span>
+            <select id="environment">
+              <option value="Produção">Produção</option>
+              <option value="Homologação">Homologação</option>
+              <option value="Desenvolvimento">Desenvolvimento</option>
+              <option value="Compartilhada/Rede">Compartilhada/Rede</option>
+              <option value="Segurança/Log">Segurança/Log</option>
+              <option value="Sandbox">Sandbox</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <button type="button" class="btn primary" id="btnSaveAndTest">Cadastrar e Testar no DocOps</button>
+        </div>
+        <div id="saveResult" class="alert" style="display:none"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const DEFAULT_TEMPLATE_URL = 'https://raw.githubusercontent.com/rgerios/DocOps/main/deploy/aws/docviva-readonly-role.yaml';
+    const $ = (id) => document.getElementById(id);
+
+    function showToast(msg) {
+      const t = $('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => t.classList.remove('show'), 2600);
+    }
+
+    async function api(path, opts = {}) {
+      const headers = { 'X-DocOps': '1', ...(opts.body ? { 'Content-Type': 'application/json' } : {}) };
+      const r = await fetch(path, {
+        method: opts.method || (opts.body ? 'POST' : 'GET'),
+        headers,
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+        credentials: 'same-origin',
+      });
+      const data = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(data?.detail || `Erro ${r.status}`);
+      return data;
+    }
+
+    function buildQuickCreateUrl() {
+      const region = $('region').value || 'us-east-1';
+      const tpl = $('templateUrl').value.trim() || DEFAULT_TEMPLATE_URL;
+      const principal = $('principalArn').value.trim();
+      const ext = $('externalId').value.trim();
+      const roleName = $('roleName').value.trim() || 'DocVivaReadOnly';
+      const params = new URLSearchParams({
+        templateURL: tpl,
+        stackName: `DocViva-${roleName}`,
+        param_PrincipalArn: principal,
+        param_ExternalId: ext,
+        param_RoleName: roleName,
+      });
+      return `https://console.aws.amazon.com/cloudformation/home?region=${encodeURIComponent(region)}#/stacks/quickcreate?${params.toString()}`;
+    }
+
+    function buildCliCommand() {
+      const principal = $('principalArn').value.trim() || 'arn:aws:iam::CONTA_DO_SERVIDOR:role/ROLE_DO_SERVIDOR';
+      const ext = $('externalId').value.trim() || 'EXT_ID_AQUI';
+      const roleName = $('roleName').value.trim() || 'DocVivaReadOnly';
+      const trust = JSON.stringify({
+        Version: '2012-10-17',
+        Statement: [{
+          Effect: 'Allow',
+          Principal: { AWS: principal },
+          Action: 'sts:AssumeRole',
+          Condition: { StringEquals: { 'sts:ExternalId': ext } },
+        }],
+      });
+      return [
+        `aws iam create-role --role-name ${roleName} \\`,
+        `  --assume-role-policy-document '${trust}' \\`,
+        `  --query 'Role.Arn' --output text`,
+        ``,
+        `aws iam attach-role-policy --role-name ${roleName} \\`,
+        `  --policy-arn arn:aws:iam::aws:policy/ReadOnlyAccess`,
+        ``,
+        `aws iam get-role --role-name ${roleName} --query 'Role.Arn' --output text`,
+      ].join('\n');
+    }
+
+    function refreshOutputs() {
+      const url = buildQuickCreateUrl();
+      $('quickUrlBox').textContent = url;
+      $('btnOpenQuick').href = url;
+      $('cliBox').textContent = buildCliCommand();
+    }
+
+    async function generateExternalId() {
+      const tid = $('tenantId').value;
+      if (!tid) {
+        const bytes = new Uint8Array(18);
+        crypto.getRandomValues(bytes);
+        $('externalId').value = 'docviva-' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+        refreshOutputs();
+        return;
+      }
+      try {
+        const r = await api(`/api/tenants/${tid}/accounts/new-external-id`);
+        $('externalId').value = r.external_id;
+        refreshOutputs();
+      } catch (e) {
+        showToast(e.message);
+      }
+    }
+
+    async function boot() {
+      $('templateUrl').value = DEFAULT_TEMPLATE_URL;
+      const qs = new URLSearchParams(location.search);
+      const wantedTenant = qs.get('tenant_id');
+
+      try {
+        const me = await api('/api/auth/me');
+        $('authBadge').textContent = `Logado: ${me.email}`;
+        $('authBadge').className = 'pill ok';
+
+        const sel = $('tenantId');
+        const editable = (me.tenants || []).filter((t) => t.role === 'admin' || t.role === 'analyst');
+        const list = editable.length ? editable : (me.tenants || []);
+        sel.innerHTML = list.map((t) => `<option value="${t.id}">${t.name}</option>`).join('');
+        if (wantedTenant && list.some((t) => String(t.id) === wantedTenant)) {
+          sel.value = wantedTenant;
+        }
+        if (!list.length) {
+          $('authAlert').style.display = 'block';
+          $('authAlert').textContent = 'Nenhum cliente disponível para o seu usuário.';
+        }
+      } catch {
+        $('authBadge').textContent = 'Não autenticado';
+        $('authBadge').className = 'pill bad';
+        $('authAlert').style.display = 'block';
+        $('authAlert').innerHTML = 'Você não está logado no DocOps neste navegador. <a href="/">Faça login no DocOps</a> e recarregue esta aba para preencher automaticamente os dados do ambiente.';
+      }
+
+      try {
+        const ident = await api('/api/platform/aws-identity');
+        if (ident.ok) {
+          $('principalArn').value = ident.principal;
+          $('awsBadge').textContent = `Conta servidor: ${ident.account}`;
+          $('awsBadge').className = 'pill ok';
+          $('principalHint').textContent = `Detectado automaticamente: ${ident.arn}`;
+        } else {
+          $('awsBadge').textContent = 'Credencial AWS pendente';
+          $('awsBadge').className = 'pill warn';
+          $('principalHint').textContent = ident.message;
+        }
+      } catch {
+        $('awsBadge').textContent = 'Identidade AWS indisponível';
+        $('awsBadge').className = 'pill warn';
+      }
+
+      await generateExternalId();
+      refreshOutputs();
+    }
+
+    ['tenantId', 'region', 'principalArn', 'roleName', 'externalId', 'templateUrl'].forEach((id) => {
+      $(id).addEventListener('input', refreshOutputs);
+      $(id).addEventListener('change', refreshOutputs);
+    });
+
+    $('btnGenExt').addEventListener('click', generateExternalId);
+
+    $('btnCopyQuick').addEventListener('click', async () => {
+      await navigator.clipboard.writeText(buildQuickCreateUrl());
+      showToast('URL do CloudFormation copiada');
+    });
+
+    $('btnCopyInvite').addEventListener('click', async () => {
+      const url = buildQuickCreateUrl();
+      const msg = [
+        'Olá! Para liberar o inventário somente leitura da conta AWS no DocOps, basta:',
+        '1. Estar logado na conta AWS de destino com perfil administrador.',
+        `2. Abrir este link: ${url}`,
+        '3. Marcar a caixa de reconhecimento de criação de recursos IAM e clicar em "Create stack".',
+        '4. Assim que concluir, copiar o valor de "RoleArn" na aba Outputs e nos enviar.',
+      ].join('\n');
+      await navigator.clipboard.writeText(msg);
+      showToast('Mensagem com o link copiada');
+    });
+
+    $('btnCopyCli').addEventListener('click', async () => {
+      await navigator.clipboard.writeText(buildCliCommand());
+      showToast('Comando CloudShell copiado');
+    });
+
+    $('returnedArn').addEventListener('input', () => {
+      const m = $('returnedArn').value.trim().match(/^arn:aws[^:]*:iam::(\d{12}):role\/(.+)$/);
+      if (m) {
+        $('accountId').value = m[1];
+        if (!$('accountAlias').value.trim()) $('accountAlias').value = `aws-${m[1]}`;
+      }
+    });
+
+    $('btnSaveAndTest').addEventListener('click', async () => {
+      const box = $('saveResult');
+      const tid = $('tenantId').value;
+      const roleArn = $('returnedArn').value.trim();
+      const accountId = $('accountId').value.trim();
+      const alias = $('accountAlias').value.trim() || (accountId ? `aws-${accountId}` : '');
+      const externalId = $('externalId').value.trim() || null;
+      const environment = $('environment').value;
+
+      box.style.display = 'block';
+      if (!tid || !accountId || !roleArn) {
+        box.className = 'alert bad';
+        box.textContent = 'Selecione o cliente e informe o Role ARN (e Account ID de 12 dígitos).';
+        return;
+      }
+
+      box.className = 'alert info';
+      box.textContent = 'Cadastrando conta e testando AssumeRole…';
+      $('btnSaveAndTest').disabled = true;
+
+      try {
+        const acc = await api(`/api/tenants/${tid}/accounts`, {
+          body: { account_id: accountId, alias, environment, role_arn: roleArn, external_id: externalId, regions: [], active: true },
+        });
+        const test = await api(`/api/tenants/${tid}/accounts/${acc.id}/test`, { method: 'POST' });
+        box.className = test.ok ? 'alert ok' : 'alert warn';
+        box.textContent = test.ok
+          ? `Conta ${acc.alias} (${acc.account_id}) cadastrada e validada! ${test.message} ${test.regions} regiões habilitadas.`
+          : `Conta ${acc.alias} cadastrada, mas o teste retornou: ${test.message}`;
+      } catch (e) {
+        box.className = 'alert bad';
+        box.textContent = e.message;
+      } finally {
+        $('btnSaveAndTest').disabled = false;
+      }
+    });
+
+    boot();
+  </script>
+</body>
+</html>

@@ -111,7 +111,10 @@ function Shell({ tenant, children }: { tenant?: TenantRef; children: ReactNode }
             {me.tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         )}
-        <nav className="tabs-top">{links.filter((l) => l[2]).map(([to, label]) => <NavLink key={to} to={`/t/${tenant!.id}/${to}`}>{label}</NavLink>)}</nav>
+        <nav className="tabs-top">
+          {links.filter((l) => l[2]).map(([to, label]) => <NavLink key={to} to={`/t/${tenant!.id}/${to}`}>{label}</NavLink>)}
+          {tenant && can(r, 'admin') && <a href={`/assumerole.html?tenant_id=${tenant.id}`} target="_blank" rel="noopener noreferrer">Assume Role ↗</a>}
+        </nav>
         <div className="user" ref={menuRef}>
           {tenant && <span className="role-tag">{ROLE_LABEL[tenant.role]}</span>}
           <button className="avatar" onClick={() => setMenu(!menu)} aria-label="Menu do usuário" aria-expanded={menu}>{(me.name || me.email).slice(0, 1).toUpperCase()}</button>
@@ -119,6 +122,7 @@ function Shell({ tenant, children }: { tenant?: TenantRef; children: ReactNode }
             <div className="user-pop">
               <div className="who"><b>{me.name}</b><span>{me.email}</span></div>
               <button onClick={() => { setMenu(false); nav('/conta') }}>Minha conta e MFA</button>
+              <a href={tenant ? `/assumerole.html?tenant_id=${tenant.id}` : '/assumerole.html'} target="_blank" rel="noopener noreferrer" onClick={() => setMenu(false)}>Assistente Assume Role ↗</a>
               {me.is_superadmin && <button onClick={() => { setMenu(false); nav('/plataforma') }}>Administração da plataforma</button>}
               <button onClick={logout}>Sair</button>
             </div>
