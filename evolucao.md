@@ -6,6 +6,16 @@
 
 ## Histórico de Evolução
 
+### 2026-11-19 — Edição White-Label ConecTI Cloud (`branch connecti`)
+- **Identidade Visual Oficial (`https://conecticloud.com.br/`)**:
+  - Extraídos e integrados a logo oficial (`frontend/src/assets/conecti-logo.png`) e o favicon vetorial SVG (`frontend/public/favicon.svg`) da **ConecTI Cloud**.
+  - Aplicada a paleta Dark Mode + Glassmorphism oficial da ConecTI Cloud em `frontend/src/styles.css` (`#02060F`, `#060D1F`, cards `rgba(13, 24, 46, 0.78)`, ciano `#22D3EE` / `#06B6D4`, azul `#3B82F6` e tipografia `Plus Jakarta Sans` + `JetBrains Mono`).
+  - Adaptados `frontend/src/theme.ts`, `frontend/src/App.tsx`, `frontend/index.html` e `backend/app/config.py` (`app_name = "ConecTI Cloud"`), preservando todas as funcionalidades da plataforma (Panorama 3 radares, Assets, Explorer, FinOps, IA Analisando, Coletas, Diff A×B).
+- **Verificação**:
+  - `npm run build` (`tsc -b && vite build`) OK e `pytest` (`19 testes passando`).
+
+---
+
 ### 2026-11-19 — 3ª Aba no Panorama (Perfil de Uso & Serviços) + Hover Interativo nos Radares (`hml`)
 - **Backend (`backend/app/services/overview.py`)**:
   - Adicionado `usageProfile` em `GET /api/tenants/{tenant_id}/overview` com 8 domínios de concentração real de serviços AWS (sem notas de maturidade), participação percentual (`sharePct`), curva de intensidade proporcional (`intensity`) e detecção automática do perfil da conta (*Serverless*, *IaaS EC2/RDS*, *Storage Heavy*, etc.).

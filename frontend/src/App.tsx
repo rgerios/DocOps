@@ -1,8 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { api, can, ROLE_LABEL, setUnauthorizedHandler, type Me, type Role, type TenantRef } from './api'
-import logoWhite from './assets/logo-white.png'
-import logoColor from './assets/logo-color.png'
+import conectiLogo from './assets/conecti-logo.png'
 import { applyTenantTheme, resetTenantTheme } from './theme'
 import { Btn, Field, useToast } from './ui'
 import Explorer from './pages/Explorer'
@@ -122,11 +121,11 @@ function Shell({ tenant, children }: { tenant?: TenantRef; children: ReactNode }
           {tenant?.logo ? (
             <img src={tenant.logo} alt={tenant.name} className="brand-client-logo" />
           ) : (
-            <img src={logoWhite} alt="G3 Solutions" />
+            <img src={conectiLogo} alt="ConecTI Cloud" className="brand-conecti-logo" />
           )}
           <div>
             <b>{tenant ? tenant.name : me.app_name}</b>
-            <span>{tenant ? `${me.app_name} · Documentação viva` : 'Documentação viva da infraestrutura de cloud'}</span>
+            <span>{tenant ? `${me.app_name} · Governança 24x7` : 'Sustentação AWS, Cloud Híbrida e Governança 24x7'}</span>
           </div>
         </div>
         {me.tenants.length > 0 && (
@@ -163,9 +162,16 @@ function AuthFrame({ children }: { children: ReactNode }) {
   return (
     <div className="auth">
       <div className="auth-hero">
-        <img src={logoColor} alt="G3 Solutions" />
-        <h1>DocOps<span>Documentação viva da infraestrutura de cloud</span></h1>
-        <ul><li>Inventário multi-conta e multi-região</li><li>Achados de segurança, resiliência e custo</li><li>Histórico, mudanças e alertas</li></ul>
+        <img src={conectiLogo} alt="ConecTI Cloud" className="auth-conecti-logo" />
+        <div className="auth-hero-copy">
+          <span className="auth-kicker">ConecTI Cloud · Governança 24x7</span>
+          <h1>DocOps<span>Sustentação AWS, Cloud Híbrida e Documentação Viva</span></h1>
+          <ul>
+            <li>Inventário multi-conta e multi-região em tempo real</li>
+            <li>Panorama 360°, FinOps &amp; AWS Well-Architected</li>
+            <li>Análise assistida por IA, histórico e alertas 24x7</li>
+          </ul>
+        </div>
       </div>
       <div className="auth-panel">{children}</div>
     </div>

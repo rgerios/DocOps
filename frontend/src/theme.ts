@@ -1,17 +1,17 @@
-// Motor de tema dinâmico por cliente (Multi-Tenant Branding)
-// Gera toda a escala de variáveis CSS do DocOps a partir da cor principal (#rrggbb) do cliente.
+// Motor de tema dinâmico por cliente — Edição ConecTI Cloud (Dark Mode + Glassmorphism)
+// Preserva a base escura oficial ConecTI (#02060F / #060D1F) e adapta os acentos por cliente.
 
-export const DEFAULT_TENANT_COLOR = '#4a7a37'
+export const DEFAULT_TENANT_COLOR = '#06b6d4'
 
 export const TENANT_PALETTE: { name: string; hex: string }[] = [
-  { name: 'Verde G3', hex: '#4a7a37' },
-  { name: 'Azul Royal', hex: '#2563eb' },
-  { name: 'Petróleo', hex: '#0f766e' },
-  { name: 'Índigo', hex: '#4f46e5' },
-  { name: 'Roxo', hex: '#7c3aed' },
-  { name: 'Laranja', hex: '#c2570a' },
-  { name: 'Carmesim', hex: '#b91c1c' },
-  { name: 'Grafite', hex: '#334155' },
+  { name: 'Ciano ConecTI', hex: '#06b6d4' },
+  { name: 'Azul Cloud', hex: '#3b82f6' },
+  { name: 'Azul Profundo', hex: '#1e40af' },
+  { name: 'Esmeralda', hex: '#10b981' },
+  { name: 'Índigo', hex: '#6366f1' },
+  { name: 'Violeta', hex: '#8b5cf6' },
+  { name: 'Âmbar', hex: '#f59e0b' },
+  { name: 'Carmesim', hex: '#ef4444' },
 ]
 
 function hexToHsl(hex: string): [number, number, number] | null {
@@ -43,10 +43,9 @@ const hsl = (h: number, s: number, l: number) =>
   `hsl(${h} ${Math.max(0, Math.min(100, Math.round(s)))}% ${Math.max(0, Math.min(100, Math.round(l)))}%)`
 
 const THEME_KEYS = [
-  '--g-950', '--g-900', '--g-800', '--g-700',
   '--brand', '--brand-600', '--leaf',
   '--pastel', '--pastel-300', '--pastel-100', '--pastel-50',
-  '--bg', '--line', '--line-2',
+  '--line',
 ]
 
 export function resetTenantTheme() {
@@ -55,52 +54,44 @@ export function resetTenantTheme() {
 }
 
 export function computeTenantVars(hex?: string | null): Record<string, string> | null {
-  if (!hex || hex.toLowerCase() === DEFAULT_TENANT_COLOR) return null
-  const parsed = hexToHsl(hex)
+  const clean = (hex || '').trim().toLowerCase()
+  // Usa a identidade oficial ConecTI Ciano para padrão ou cor legada G3
+  if (!clean || clean === DEFAULT_TENANT_COLOR || clean === '#4a7a37') return null
+  const parsed = hexToHsl(clean)
   if (!parsed) return null
-  const [h, rawS, rawL] = parsed
-  // Normaliza saturação e luminosidade para manter contraste legível em qualquer cor escolhida
-  const s = Math.max(12, Math.min(78, rawS))
-  const brandL = Math.max(34, Math.min(48, rawL))
-  const darkS = Math.min(55, Math.max(18, Math.round(s * 0.72)))
-  const softS = Math.min(48, Math.max(14, Math.round(s * 0.65)))
-  const tintS = Math.min(28, Math.max(8, Math.round(s * 0.35)))
+  const [h, rawS] = parsed
+  const s = Math.max(48, Math.min(92, rawS))
 
   return {
-    '--g-950': hsl(h, darkS, 12),
-    '--g-900': hsl(h, darkS, 17),
-    '--g-800': hsl(h, darkS, 23),
-    '--g-700': hsl(h, Math.min(68, Math.round(s * 0.85)), Math.max(26, brandL - 8)),
-    '--brand': hsl(h, s, Math.min(54, brandL + 5)),
-    '--brand-600': hsl(h, s, brandL),
-    '--leaf': hsl(h, s, Math.min(58, brandL + 9)),
-    '--pastel': hsl(h, softS, 68),
-    '--pastel-300': hsl(h, softS, 80),
-    '--pastel-100': hsl(h, softS, 91),
-    '--pastel-50': hsl(h, softS, 96),
-    '--bg': hsl(h, tintS, 97),
-    '--line': hsl(h, tintS, 89),
-    '--line-2': hsl(h, tintS, 93),
+    '--brand': hsl(h, s, 56),
+    '--brand-600': hsl(h, s, 46),
+    '--leaf': hsl(h, s, 64),
+    '--pastel': hsl(h, s, 68),
+    '--pastel-300': `hsla(${h}, ${s}%, 60%, 0.38)`,
+    '--pastel-100': `hsla(${h}, ${s}%, 55%, 0.16)`,
+    '--pastel-50': `hsla(${h}, ${s}%, 55%, 0.09)`,
+    '--line': `hsla(${h}, ${s}%, 60%, 0.18)`,
   }
 }
 
 export function computeViewerThemeVars(hex?: string | null): Record<string, string> | null {
-  const v = computeTenantVars(hex)
-  if (!v) return null
+  const clean = (hex || '').trim().toLowerCase()
+  const target = !clean || clean === '#4a7a37' ? DEFAULT_TENANT_COLOR : clean
+  const parsed = hexToHsl(target)
+  if (!parsed) return null
+  const [h, rawS] = parsed
+  const s = Math.max(40, Math.min(82, rawS))
   return {
-    '--navy-950': v['--g-950'],
-    '--navy-900': v['--g-900'],
-    '--navy-800': v['--g-800'],
-    '--navy-700': v['--g-700'],
-    '--brand': v['--brand'],
-    '--brand-600': v['--brand-600'],
-    '--lav': v['--pastel'],
-    '--lav-300': v['--pastel-300'],
-    '--lav-100': v['--pastel-100'],
-    '--lav-50': v['--pastel-50'],
-    '--bg': v['--bg'],
-    '--line': v['--line'],
-    '--line-2': v['--line-2'],
+    '--navy-950': '#02060f',
+    '--navy-900': '#060d1f',
+    '--navy-800': '#0d1a36',
+    '--navy-700': hsl(h, Math.min(72, s), 34),
+    '--brand': hsl(h, s, 46),
+    '--brand-600': hsl(h, s, 38),
+    '--lav': hsl(h, s, 64),
+    '--lav-300': hsl(h, s, 78),
+    '--lav-100': hsl(h, Math.min(60, s), 92),
+    '--lav-50': hsl(h, Math.min(45, s), 96),
   }
 }
 
