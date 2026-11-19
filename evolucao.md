@@ -6,6 +6,19 @@
 
 ## Histórico de Evolução
 
+### 2026-11-19 — Panorama Geral (Raio-X 8 Pilares + Benchmark/Camadas) e Infraestrutura & Assets (`hml`)
+- **Backend (`backend/app/services/overview.py`, `backend/app/routers/data.py`)**:
+  - Novo endpoint `GET /api/tenants/{tenant_id}/overview` calculando em tempo real sobre as coletas vigentes e achados os **8 pilares AWS (0–100)** (`Computação`, `Armazenamento`, `Bancos de Dados`, `Redes`, `Observabilidade`, `Governança`, `FinOps`, `Segurança Borda`), status por serviço, recomendações acionáveis, 3 camadas concêntricas (`core`, `governance`, `ecosystem`) e diagnósticos executivos.
+  - Novo endpoint `GET /api/tenants/{tenant_id}/assets` entregando inventário tabular unificado de recursos AWS (EC2, S3, RDS, EBS, VPC, Lambda, ALB/NLB, EIP) com status operacional, tags e achados vinculados.
+- **Frontend (`frontend/src/pages/Panorama.tsx`, `frontend/src/pages/Assets.tsx`, `frontend/src/App.tsx`, `frontend/src/styles.css`)**:
+  - Nova aba **Panorama** (`/t/:tid/panorama`) com duas visões: **Raio-X da Conta** (Radar Poligonal SVG interativo de 8 eixos + Inspector lateral contextual) e **Benchmark Setorial & Camadas Concêntricas** (diagrama concêntrico multicamadas SVG com malha pontilhada de mercado + barras comparativas Conta × Mercado + Diagnóstico Automatizado).
+  - Nova aba **Assets** (`/t/:tid/assets`) com filtros rápidos por tipo/status, busca por tags, paginação e modal técnico detalhado.
+  - 100% compatível com o tema dinâmico por cliente (`--brand` / `--brand-600`).
+- **Verificação**:
+  - `npm run build` (`tsc -b && vite build`) OK e `pytest` (`19 testes passando`).
+
+---
+
 ### 2026-11-19 — Rollback do Redesign na `main` e Fluxo de Branches `hml` → `main`
 - **UI / Rollback**:
   - Restaurado o visual original de PRD (`frontend/src/App.tsx`, `frontend/src/styles.css`, `frontend/src/pages/FinOps.tsx` do commit `4d15a3d`) na branch `main`, mantendo a estrutura de containers HML/PRD (`docker-compose.hml.yml`, `scripts/deploy.sh`) e a documentação.

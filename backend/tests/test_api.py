@@ -369,3 +369,27 @@ def test_ai_conversation_history(client, admin, tenant, monkeypatch):
     deleted = client.delete(f"/api/tenants/{t}/ai/history/{conv_id}", headers=H)
     assert deleted.status_code == 200
     assert client.get(f"/api/tenants/{t}/ai/history/{conv_id}").status_code == 404
+
+
+def test_overview_and_assets_endpoints(client, admin, tenant):
+    t = tenant["id"]
+    login(client, admin["email"], admin["password"])
+
+    ov = client.get(f"/api/tenants/{t}/overview")
+    assert ov.status_code == 200, ov.text
+    body = ov.json()
+    assert body["hasData"] is True
+    assert 0 <= body["overallScore"] <= 100
+    assert len(body["pillars"]) == 8
+    for p in body["pillars"]:
+        assert 0 <= p["score"] <= 100
+        assert p["status"] in ("high", "moderate", "suboptimal", "critical")
+        assert isinstance(p["services"], list) and len(p["services"]) >= 1
+    assert set(body["layers"].keys()) == {"core", "governance", "ecosystem"}
+
+    assets = client.get(f"/api/tenants/{t}/assets")
+    assert assets.status_code == 200, assets.text
+    ab = assets.json()
+    assert ab["total"] > 0
+    assert len(ab["items"]) == ab["total"]
+    assert all("type" in it and "status" in it and "region" in it for it in ab["items"])

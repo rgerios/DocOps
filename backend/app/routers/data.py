@@ -5,6 +5,7 @@ from sqlalchemy import desc, select
 
 from ..deps import Ctx, tenant_ctx
 from ..models import Collection, Note, TenantDoc, TenantState, User
+from ..services import overview as overview_svc
 from ..services import pipeline
 
 router = APIRouter(prefix="/api/tenants/{tenant_id}", tags=["data"])
@@ -198,6 +199,48 @@ def finops_overview(c: Ctx = Depends(tenant_ctx("viewer"))):
         "accounts": accounts_cost,
         "findings": finops_findings,
     }
+
+
+def _findings_with_notes(c: Ctx) -> list[dict]:
+    st = c.db.get(TenantState, c.tenant.id)
+    notes = {
+        n.key.split("|", 1)[1]: n.data
+        for n in c.db.scalars(select(Note).where(Note.tenant_id == c.tenant.id, Note.key.like("finding|%")))
+    }
+    out = []
+    for f in (st.findings if st else []):
+        item = dict(f)
+        n = notes.get(item["id"]) or {}
+        item["status"] = n.get("status", "aberto")
+        item["owner"] = n.get("owner")
+        item["note"] = n.get("text")
+        out.append(item)
+    return out
+
+
+@router.get("/overview")
+def tenant_overview(
+    account_id: str | None = Query(default=None),
+    c: Ctx = Depends(tenant_ctx("viewer")),
+):
+    """Panorama Geral: Raio-X da Conta (8 pilares reais 0-100) + Benchmark & Camadas Concêntricas."""
+    cols = pipeline.latest_collections(c.db, c.tenant.id)
+    found = _findings_with_notes(c)
+    res = overview_svc.build_overview(cols, found, account_id=account_id)
+    st = c.db.get(TenantState, c.tenant.id)
+    res["computedAt"] = st.computed_at if st else None
+    return res
+
+
+@router.get("/assets")
+def tenant_assets(
+    account_id: str | None = Query(default=None),
+    c: Ctx = Depends(tenant_ctx("viewer")),
+):
+    """Inventário tabular unificado de recursos AWS com status, tags e achados."""
+    cols = pipeline.latest_collections(c.db, c.tenant.id)
+    found = _findings_with_notes(c)
+    return overview_svc.build_assets(cols, found, account_id=account_id)
 
 
 class NotesIn(BaseModel):

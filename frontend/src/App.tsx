@@ -16,6 +16,8 @@ import MyAccount from './pages/MyAccount'
 import Platform from './pages/Platform'
 import AiAnalysis from './pages/AiAnalysis'
 import FinOps from './pages/FinOps'
+import Panorama from './pages/Panorama'
+import Assets from './pages/Assets'
 
 // ── sessão ──
 interface Session { me: Me; setMe: (m: Me | null) => void; refresh: () => Promise<void> }
@@ -70,7 +72,9 @@ function TenantRoutes() {
   return (
     <Shell tenant={t}>
       <Routes>
+        <Route path="panorama" element={can(r, 'viewer') ? <Panorama /> : <Navigate to="../explorer" />} />
         <Route path="explorer" element={<Explorer key={t.id} />} />
+        <Route path="assets" element={can(r, 'viewer') ? <Assets /> : <Navigate to="../explorer" />} />
         <Route path="coletas" element={can(r, 'viewer') ? <Collections /> : <Navigate to="../explorer" />} />
         <Route path="contas" element={can(r, 'viewer') ? <Accounts /> : <Navigate to="../explorer" />} />
         <Route path="agendamentos" element={can(r, 'viewer') ? <Schedules /> : <Navigate to="../explorer" />} />
@@ -106,7 +110,7 @@ function Shell({ tenant, children }: { tenant?: TenantRef; children: ReactNode }
   }, [menu])
   const r = tenant?.role
   const links: [string, string, boolean][] = tenant ? [
-    ['explorer', 'Explorer', true], ['finops', 'FinOps & Custos', can(r, 'viewer')], ['ia', 'IA Analisando', can(r, 'viewer')], ['coletas', 'Coletas', can(r, 'viewer')], ['contas', 'Contas AWS', can(r, 'viewer')],
+    ['panorama', 'Panorama', can(r, 'viewer')], ['explorer', 'Explorer', true], ['assets', 'Assets', can(r, 'viewer')], ['finops', 'FinOps & Custos', can(r, 'viewer')], ['ia', 'IA Analisando', can(r, 'viewer')], ['coletas', 'Coletas', can(r, 'viewer')], ['contas', 'Contas AWS', can(r, 'viewer')],
     ['agendamentos', 'Agendamentos', can(r, 'viewer')], ['alertas', 'Alertas', can(r, 'admin')], ['acessos', 'Acessos', can(r, 'admin')],
     ['auditoria', 'Auditoria', can(r, 'admin')],
   ] : []
