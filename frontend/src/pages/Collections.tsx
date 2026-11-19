@@ -14,12 +14,14 @@ export default function Collections() {
   const [acct, setAcct] = useState('')
   const [open, setOpen] = useState<number | null>(null)
   const [guide, setGuide] = useState(false)
+  const [cmpOpen, setCmpOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const file = useRef<HTMLInputElement>(null)
   const { data, error, reload } = useLoad<CollectionRow[]>(
     () => api(`/api/tenants/${tenant.id}/collections${acct ? `?account_id=${acct}` : ''}`), [tenant.id, acct],
     (d) => (d?.some((c) => c.status === 'queued' || c.status === 'running') ? 4000 : null))
   const accounts = [...new Map((data || []).map((c) => [c.account_id, c.alias])).entries()]
+  const doneCols = (data || []).filter((c) => c.status === 'done')
 
   const upload = async (files: FileList | null) => {
     if (!files?.length) return
@@ -42,8 +44,9 @@ export default function Collections() {
     <div className="page">
       <PageHead title="Coletas" sub="Histórico de inventários de cada conta. A coleta mais recente de cada conta alimenta o Explorer; cada nova coleta é comparada com a anterior."
         actions={<>
+          {doneCols.length >= 2 && <Btn onClick={() => setCmpOpen(true)}>Comparar (A × B)</Btn>}
           <Btn onClick={() => setGuide(true)}>Como coletar (CloudShell)</Btn>
-          <a className="btn" href="/docviva_collector.py" download="docviva_collector.py">Baixar coletor.py</a>
+          <a className="btn" href="/api/collector.py" download="docviva_collector.py">Baixar coletor.py</a>
           {can(role, 'analyst') && <>
             <input ref={file} type="file" multiple accept=".json,.gz" hidden onChange={(e) => upload(e.target.files)} />
             <Btn busy={busy} onClick={() => file.current?.click()}>Importar arquivo do coletor</Btn>
@@ -79,6 +82,7 @@ export default function Collections() {
           </table>)}
       </Card>
       {open && <Detail tenantId={tenant.id} id={open} canDelete={can(role, 'admin')} onClose={() => setOpen(null)} onDeleted={() => { setOpen(null); reload() }} />}
+      {cmpOpen && <CompareModal tenantId={tenant.id} collections={doneCols} onClose={() => setCmpOpen(false)} />}
       {guide && <CollectorGuide onClose={() => setGuide(false)} />}
     </div>
   )
@@ -145,12 +149,12 @@ function CollectorGuide({ onClose }: { onClose: () => void }) {
   const outFile = `docviva_${cleanAlias}.json.gz`
   const flags = `--alias ${cleanAlias} --gzip${noCost ? ' --no-cost' : ''} -o ${outFile}`
   const cmdUpload = `python3 docviva_collector.py ${flags}`
-  const cmdCurl = `curl -sSL https://raw.githubusercontent.com/rgerios/DocOps/main/scripts/docviva_collector.py -o docviva_collector.py && \\\npython3 docviva_collector.py ${flags}`
+  const cmdCurl = `curl -sSL https://raw.githubusercontent.com/rgerios/DocOps/main/backend/app/services/collector.py -o docviva_collector.py && \\\npython3 docviva_collector.py ${flags}`
   const copy = (txt: string) => { navigator.clipboard?.writeText(txt); toast('Comando copiado') }
 
   return (
     <Modal title="Como fazer a coleta (Automática ou CloudShell)" onClose={onClose} wide footer={<>
-      <a className="btn" href="/docviva_collector.py" download="docviva_collector.py">Baixar docviva_collector.py</a>
+      <a className="btn" href="/api/collector.py" download="docviva_collector.py">Baixar docviva_collector.py</a>
       <Btn kind="primary" onClick={onClose}>Fechar</Btn>
     </>}>
       <div className="alert info">
@@ -181,6 +185,68 @@ function CollectorGuide({ onClose }: { onClose: () => void }) {
 
       <p><b>Passo 3 — Baixar o JSON e importar no DocOps</b></p>
       <p className="muted small">Ao finalizar, no CloudShell clique em <b>Actions → Download file</b>, informe <code>/home/cloudshell-user/{outFile}</code> (ou apenas <code>{outFile}</code>) e importe o arquivo clicando em <b>Importar arquivo do coletor</b>.</p>
+    </Modal>
+  )
+}
+
+function CompareModal({ tenantId, collections, onClose }: { tenantId: number; collections: CollectionRow[]; onClose: () => void }) {
+  const [targetId, setTargetId] = useState<number>(collections[0]?.id || 0)
+  const [baseId, setBaseId] = useState<number>(collections[1]?.id || collections[0]?.id || 0)
+  const [f, setF] = useState<'all' | 'added' | 'removed' | 'changed'>('all')
+  const [res, setRes] = useState<any>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const run = async () => {
+    if (!baseId || !targetId) return
+    setBusy(true); setErr(null)
+    try {
+      const r = await api(`/api/tenants/${tenantId}/collections/compare?base_id=${baseId}&target_id=${targetId}`)
+      setRes(r)
+    } catch (e: any) {
+      setRes(null); setErr(e.message)
+    } finally { setBusy(false) }
+  }
+
+  const d = res?.diff
+  const items = (d?.items || []).filter((i: any) => f === 'all' || i.change === f)
+
+  return (
+    <Modal title="Comparar coletas (A × B)" onClose={onClose} wide footer={<Btn onClick={onClose}>Fechar</Btn>}>
+      <div className="grid2">
+        <Field label="Coleta Base (A — anterior)">
+          <select value={baseId} onChange={(e) => setBaseId(Number(e.target.value))}>
+            {collections.map((c) => <option key={c.id} value={c.id}>#{c.id} · {c.alias} ({fmtDT(c.collected_at)})</option>)}
+          </select>
+        </Field>
+        <Field label="Coleta Alvo (B — mais recente)">
+          <select value={targetId} onChange={(e) => setTargetId(Number(e.target.value))}>
+            {collections.map((c) => <option key={c.id} value={c.id}>#{c.id} · {c.alias} ({fmtDT(c.collected_at)})</option>)}
+          </select>
+        </Field>
+      </div>
+      <div className="row" style={{ marginBottom: 14 }}>
+        <Btn kind="primary" busy={busy} disabled={!baseId || !targetId || baseId === targetId} onClick={run}>Comparar agora</Btn>
+        {baseId === targetId && <span className="muted small">Escolha duas coletas diferentes.</span>}
+      </div>
+      {err && <div className="alert bad">{err}</div>}
+      {d && <>
+        <div className="chips">
+          {(['all', 'added', 'removed', 'changed'] as const).map((k) => (
+            <button key={k} className={`chip ${f === k ? 'on' : ''}`} onClick={() => setF(k)}>
+              {k === 'all' ? `Todas · ${d.added + d.removed + d.changed}` : `${CHANGE[k][0]}s · ${d[k]}`}
+            </button>))}
+        </div>
+        {!items.length ? <Empty title="Sem diferenças entre as coletas selecionadas" /> : (
+          <table className="t compact">
+            <thead><tr><th>Mudança</th><th>Tipo</th><th>Recurso</th><th>Região</th><th>Detalhe</th></tr></thead>
+            <tbody>{items.slice(0, 500).map((i: any, n: number) => (
+              <tr key={n}><td><Pill kind={CHANGE[i.change][1]}>{CHANGE[i.change][0]}</Pill></td><td className="small">{i.type_label}</td>
+                <td><b>{i.name}</b>{i.name !== i.id && <span className="sub mono">{i.id}</span>}</td><td className="small">{i.region}</td>
+                <td className="small">{i.fields ? i.fields.map((fl: string) => <span key={fl} className="tag" title={i.before?.[fl] !== undefined ? `${String(i.before[fl])} → ${String(i.after?.[fl])}` : ''}>{fl}{i.before?.[fl] !== undefined && <> : <s>{String(i.before[fl])}</s> → {String(i.after?.[fl])}</>}</span>) : ''}</td></tr>))}
+            </tbody>
+          </table>)}
+      </>}
     </Modal>
   )
 }

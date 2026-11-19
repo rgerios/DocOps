@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, can, fmtDT } from '../api'
+import { api, can, escHtml, exportPdf, fmtDT } from '../api'
 import { useTenant } from '../App'
 import { Btn, Card, Empty, ErrorBox, PageHead, Pill, useLoad, useToast } from '../ui'
 
@@ -61,9 +61,76 @@ export default function FinOps() {
   const toast = useToast()
   const { data, error, setData } = useLoad<FinOpsData>(() => api(`/api/tenants/${tenant.id}/finops`), [tenant.id])
   const [busy, setBusy] = useState(false)
+  const [pdfBusy, setPdfBusy] = useState(false)
   const [cat, setCat] = useState<'all' | 'Custo' | 'Well-Architected'>('all')
   const [status, setStatus] = useState<'open' | 'all'>('open')
   const [q, setQ] = useState('')
+
+  const exportFinOpsPdf = async () => {
+    if (!data) return
+    setPdfBusy(true)
+    try {
+      const brand = tenant.color || '#2563eb'
+      const s0 = data.summary
+      const accRows = data.accounts.map((a) => `<tr>
+        <td><b>${escHtml(a.alias)}</b><br><small>${escHtml(a.account_id)}</small></td>
+        <td>${a.mtd != null ? `US$ ${a.mtd}` : '—'}</td>
+        <td>${a.forecast != null ? `US$ ${a.forecast}` : '—'}</td>
+        <td><b>${a.estimated_savings_usd > 0 ? `US$ ${a.estimated_savings_usd}` : '—'}</b></td>
+        <td>${a.co_count}</td>
+        <td>${a.savings_plans?.estimated_monthly_savings_usd ? `US$ ${a.savings_plans.estimated_monthly_savings_usd} (${a.savings_plans.estimated_savings_pct ?? 0}%)` : '—'}</td>
+      </tr>`).join('')
+      const findRows = rows.slice(0, 120).map((f) => `<tr>
+        <td><span class="sev ${escHtml(f.sev)}">${escHtml(SEV_PILL[f.sev]?.[0] || f.sev)}</span></td>
+        <td>${escHtml(f.cat)}</td>
+        <td><b>${escHtml(f.title)}</b><br><small>${escHtml(f.detail)}</small></td>
+        <td>${escHtml(f.account)} · ${escHtml(f.region)}<br><small>${escHtml(f.resource)}</small></td>
+        <td>${escHtml(f.rec)}</td>
+      </tr>`).join('')
+      const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><style>
+        @page { size: A4 landscape; margin: 14mm; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #0f172a; font-size: 10.5px; line-height: 1.45; }
+        .hdr { border-left: 5px solid ${brand}; padding-left: 12px; margin-bottom: 16px; }
+        .hdr h1 { margin: 0 0 4px; font-size: 18px; } .hdr p { margin: 0; color: #475569; }
+        .kpis { display: flex; gap: 10px; margin-bottom: 16px; }
+        .kpi { flex: 1; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; background: #f8fafc; }
+        .kpi span { display: block; font-size: 9px; color: #64748b; text-transform: uppercase; }
+        .kpi b { font-size: 15px; color: #0f172a; }
+        h2 { font-size: 13px; margin: 16px 0 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+        th, td { border-bottom: 1px solid #e2e8f0; padding: 5px 6px; text-align: left; vertical-align: top; }
+        th { background: #f1f5f9; font-size: 9.5px; text-transform: uppercase; color: #475569; }
+        small { color: #64748b; }
+        .sev { display: inline-block; padding: 1px 6px; border-radius: 10px; font-weight: 600; font-size: 9px; }
+        .sev.critical, .sev.high { background: #fee2e2; color: #b91c1c; }
+        .sev.medium { background: #fef3c7; color: #b45309; }
+        .sev.low, .sev.info { background: #e0f2fe; color: #0369a1; }
+      </style></head><body>
+        <div class="hdr">
+          <h1>Relatório FinOps &amp; Well-Architected — ${escHtml(tenant.name)}</h1>
+          <p>Gerado em ${escHtml(fmtDT(new Date().toISOString()))}${data.computed_at ? ` · Base de achados: ${escHtml(fmtDT(data.computed_at))}` : ''}</p>
+        </div>
+        <div class="kpis">
+          <div class="kpi"><span>Economia Estimada/mês</span><b>${s0.estimated_monthly_savings_usd > 0 ? `US$ ${s0.estimated_monthly_savings_usd}` : '—'}</b></div>
+          <div class="kpi"><span>Gasto Atual (MTD)</span><b>${s0.mtd_cost_usd > 0 ? `US$ ${s0.mtd_cost_usd}` : '—'}</b></div>
+          <div class="kpi"><span>Previsão Mês</span><b>${s0.forecast_cost_usd > 0 ? `US$ ${s0.forecast_cost_usd}` : '—'}</b></div>
+          <div class="kpi"><span>EBS gp2 / Órfãos</span><b>${s0.gp2_volumes} / ${s0.unattached_ebs}</b></div>
+          <div class="kpi"><span>Gerações Antigas</span><b>${s0.old_gen_ec2 + s0.old_gen_rds}</b></div>
+          <div class="kpi"><span>Riscos Well-Architected</span><b>${s0.well_architected_risks}</b></div>
+        </div>
+        <h2>Resumo por Conta AWS (${data.accounts.length})</h2>
+        <table><thead><tr><th>Conta</th><th>Gasto MTD</th><th>Previsão</th><th>Economia Est./mês</th><th>Compute Optimizer</th><th>Savings Plans</th></tr></thead><tbody>${accRows}</tbody></table>
+        <h2>Plano de Ação FinOps &amp; Well-Architected (${rows.length} item(ns))</h2>
+        <table><thead><tr><th>Sev.</th><th>Categoria</th><th>Achado</th><th>Recurso</th><th>Recomendação</th></tr></thead><tbody>${findRows}</tbody></table>
+      </body></html>`
+      await exportPdf(tenant.id, html, `FinOps_${tenant.slug || tenant.id}.pdf`)
+      toast('PDF FinOps exportado')
+    } catch (e: any) {
+      toast(e.message, 'err')
+    } finally {
+      setPdfBusy(false)
+    }
+  }
 
   const recompute = async () => {
     setBusy(true)
@@ -93,6 +160,7 @@ export default function FinOps() {
         title="FinOps & Well-Architected"
         sub={`Alvos de otimização financeira (COST05–COST08), Compute Optimizer, Savings Plans e riscos do Well-Architected para ${tenant.name}.${data?.computed_at ? ` Atualizado em ${fmtDT(data.computed_at)}.` : ''}`}
         actions={<>
+          {data && <Btn busy={pdfBusy} onClick={exportFinOpsPdf}>Exportar PDF</Btn>}
           <Btn onClick={() => nav(`/t/${tenant.id}/ia`)}>Analisar com IA</Btn>
           {can(role, 'analyst') && <Btn kind="primary" busy={busy} onClick={recompute}>Recalcular achados</Btn>}
         </>}

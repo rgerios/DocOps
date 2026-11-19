@@ -10,7 +10,7 @@ from sqlalchemy.orm import undefer
 from ..config import settings
 from ..deps import Ctx, tenant_ctx
 from ..models import AwsAccount, Collection, User
-from ..services import pipeline
+from ..services import diff as diff_svc, pipeline
 from ..services.normalize import parse_bytes, to_payloads
 
 router = APIRouter(prefix="/api/tenants/{tenant_id}", tags=["accounts"])
@@ -158,6 +158,28 @@ def list_collections(account_id: str | None = None, limit: int = 100, c: Ctx = D
     cols = list(c.db.scalars(q.order_by(Collection.id.desc()).limit(min(limit, 500))))
     users = {u.id: u.email for u in c.db.scalars(select(User).where(User.id.in_({x.triggered_by for x in cols if x.triggered_by})))}
     return [col_out(x, users) for x in cols]
+
+
+@router.get("/collections/compare")
+def compare_collections(base_id: int, target_id: int, c: Ctx = Depends(tenant_ctx("viewer"))):
+    """Compara quaisquer duas coletas concluídas do mesmo cliente (Diff A × B)."""
+    if base_id == target_id:
+        raise HTTPException(400, "Selecione duas coletas diferentes para comparar.")
+    rows = list(c.db.scalars(
+        select(Collection).options(undefer(Collection.payload))
+        .where(Collection.tenant_id == c.tenant.id, Collection.id.in_([base_id, target_id]), Collection.status == "done")
+    ))
+    by_id = {x.id: x for x in rows}
+    base, target = by_id.get(base_id), by_id.get(target_id)
+    if not base or not target:
+        raise HTTPException(404, "Coleta base ou alvo não encontrada (ou ainda não concluída).")
+    if bool((base.summary or {}).get("legacy")) != bool((target.summary or {}).get("legacy")):
+        raise HTTPException(400, "Não é possível comparar uma coleta legada com uma coleta v2.")
+    return {
+        "base": col_out(base),
+        "target": col_out(target),
+        "diff": diff_svc.compare(base.payload, target.payload),
+    }
 
 
 @router.get("/collections/{col_id}")

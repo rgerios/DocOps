@@ -282,3 +282,90 @@ def test_finops_and_well_architected_findings(client, admin, tenant):
 
     rec = client.post(f"/api/tenants/{t}/findings/recompute", headers=H)
     assert rec.status_code == 200
+
+
+def test_secret_encryption_at_rest(client, admin, tenant):
+    from app.db import SessionLocal
+    from app.models import TenantAIConfig, TenantSetting
+    from app.security import decrypt_secret, encrypt_secret
+
+    enc = encrypt_secret("sk-super-secret-123")
+    assert enc and enc.startswith("enc:")
+    assert decrypt_secret(enc) == "sk-super-secret-123"
+    assert decrypt_secret("legacy-plaintext-value") == "legacy-plaintext-value"
+
+    t = tenant["id"]
+    login(client, admin["email"], admin["password"])
+    r = client.put(
+        f"/api/tenants/{t}/settings",
+        json={"teams_webhook": "https://prod-01.westus.logic.azure.com/workflows/abc", "alert_severities": ["critical"]},
+        headers=H,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["teams_configured"] is True
+
+    with SessionLocal() as db:
+        ai_cfg = db.get(TenantAIConfig, t)
+        assert ai_cfg and ai_cfg.api_key and ai_cfg.api_key.startswith("enc:")
+        t_cfg = db.get(TenantSetting, t)
+        assert t_cfg and t_cfg.teams_webhook and t_cfg.teams_webhook.startswith("enc:")
+        assert decrypt_secret(t_cfg.teams_webhook) == "https://prod-01.westus.logic.azure.com/workflows/abc"
+
+
+def test_collector_endpoint(client):
+    r = client.get("/api/collector.py")
+    assert r.status_code == 200
+    assert "DocViva Collector v2" in r.text
+    assert "attachment" in r.headers.get("content-disposition", "")
+
+
+def test_compare_collections_a_vs_b(client, admin, tenant):
+    t = tenant["id"]
+    login(client, admin["email"], admin["password"])
+    cols = [c for c in client.get(f"/api/tenants/{t}/collections").json() if c["status"] == "done" and not (c.get("summary") or {}).get("legacy")]
+    assert len(cols) >= 2
+    r = client.get(f"/api/tenants/{t}/collections/compare?base_id={cols[-1]['id']}&target_id={cols[0]['id']}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["base"]["id"] == cols[-1]["id"]
+    assert body["target"]["id"] == cols[0]["id"]
+    assert "items" in body["diff"]
+
+    same = client.get(f"/api/tenants/{t}/collections/compare?base_id={cols[0]['id']}&target_id={cols[0]['id']}")
+    assert same.status_code == 400
+
+
+def test_ai_conversation_history(client, admin, tenant, monkeypatch):
+    t = tenant["id"]
+    login(client, admin["email"], admin["password"])
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        return type("R", (), {
+            "status_code": 200,
+            "text": "",
+            "json": lambda self: {"choices": [{"message": {"content": "Resposta persistida no histórico."}}]},
+        })()
+
+    monkeypatch.setattr("app.services.ai.httpx.post", fake_post)
+    r1 = client.post(f"/api/tenants/{t}/ai/ask", json={"question": "Resumo executivo do ambiente"}, headers=H)
+    assert r1.status_code == 200, r1.text
+    conv_id = r1.json()["conversation_id"]
+    assert conv_id
+
+    r2 = client.post(
+        f"/api/tenants/{t}/ai/ask",
+        json={"question": "Detalhe os custos", "conversation_id": conv_id},
+        headers=H,
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["conversation_id"] == conv_id
+
+    hist = client.get(f"/api/tenants/{t}/ai/history").json()
+    assert any(h["id"] == conv_id and h["message_count"] == 4 for h in hist)
+
+    detail = client.get(f"/api/tenants/{t}/ai/history/{conv_id}").json()
+    assert len(detail["messages"]) == 4
+
+    deleted = client.delete(f"/api/tenants/{t}/ai/history/{conv_id}", headers=H)
+    assert deleted.status_code == 200
+    assert client.get(f"/api/tenants/{t}/ai/history/{conv_id}").status_code == 404

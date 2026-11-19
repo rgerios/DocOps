@@ -1,5 +1,6 @@
-"""Senhas (Argon2), sessão (JWT em cookie HttpOnly), MFA (TOTP)."""
+"""Senhas (Argon2), sessão (JWT em cookie HttpOnly), MFA (TOTP) e criptografia de segredos em repouso."""
 import base64
+import hashlib
 import io
 import re
 import secrets
@@ -11,11 +12,35 @@ import qrcode
 import qrcode.image.svg
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
+from cryptography.fernet import Fernet, InvalidToken
 
 from .config import settings
 
 COOKIE = "docops_session"
+ENC_PREFIX = "enc:v1:"
 _ph = PasswordHasher()
+
+
+def _fernet() -> Fernet:
+    key = base64.urlsafe_b64encode(hashlib.sha256(settings.secret_key.encode("utf-8")).digest())
+    return Fernet(key)
+
+
+def encrypt_secret(value: str | None) -> str | None:
+    if not value:
+        return value
+    if value.startswith(ENC_PREFIX):
+        return value
+    return ENC_PREFIX + _fernet().encrypt(value.encode("utf-8")).decode("ascii")
+
+
+def decrypt_secret(value: str | None) -> str | None:
+    if not value or not value.startswith(ENC_PREFIX):
+        return value
+    try:
+        return _fernet().decrypt(value[len(ENC_PREFIX):].encode("ascii")).decode("utf-8")
+    except InvalidToken:
+        return None
 
 
 def hash_password(p: str) -> str:
@@ -65,7 +90,8 @@ def new_totp_secret() -> str:
 
 
 def totp_ok(secret: str, code: str) -> bool:
-    return bool(secret) and pyotp.TOTP(secret).verify((code or "").strip().replace(" ", ""), valid_window=1)
+    raw = decrypt_secret(secret)
+    return bool(raw) and pyotp.TOTP(raw).verify((code or "").strip().replace(" ", ""), valid_window=1)
 
 
 def totp_qr_svg(secret: str, email: str) -> tuple[str, str]:

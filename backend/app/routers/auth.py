@@ -12,7 +12,7 @@ from ..config import settings
 from ..db import get_db
 from ..deps import audit, current_user
 from ..models import Membership, Tenant, User
-from ..security import (COOKIE, hash_password, make_session, new_totp_secret, password_problems, totp_ok, totp_qr_svg,
+from ..security import (COOKIE, encrypt_secret, hash_password, make_session, new_totp_secret, password_problems, totp_ok, totp_qr_svg,
                         verify_password)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -171,10 +171,11 @@ def change_password(body: PasswordIn, request: Request, response: Response, u: U
 def mfa_setup(u: User = Depends(current_user), db: Session = Depends(get_db)):
     if u.totp_enabled:
         raise HTTPException(400, "MFA já está ativo. Desative antes de configurar outro autenticador.")
-    u.totp_secret = new_totp_secret()
+    raw_secret = new_totp_secret()
+    u.totp_secret = encrypt_secret(raw_secret)
     db.commit()
-    uri, qr = totp_qr_svg(u.totp_secret, u.email)
-    return {"secret": u.totp_secret, "uri": uri, "qr": qr}
+    uri, qr = totp_qr_svg(raw_secret, u.email)
+    return {"secret": raw_secret, "uri": uri, "qr": qr}
 
 
 class CodeIn(BaseModel):

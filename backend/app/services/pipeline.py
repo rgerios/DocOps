@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, undefer
 from ..config import settings
 from ..db import SessionLocal
 from ..models import AwsAccount, Collection, Note, Tenant, TenantSetting, TenantState
+from ..security import decrypt_secret
 from . import alerts, collector
 from .diff import compare
 from .findings import compute
@@ -53,16 +54,22 @@ def enqueue_collection(db: Session, acc: AwsAccount, trigger: str = "manual", us
 
 # ── consultas ────────────────────────────────────────────────────────────────
 def latest_collections(db: Session, tenant_id: int, with_payload=True) -> list[Collection]:
-    """Coleta vigente de cada conta: a mais recente, preferindo coletor v2 a arquivos legados."""
+    """Coleta vigente de cada conta: a mais recente, preferindo coletor v2 a arquivos legados.
+    Seleciona primeiro os IDs sem carregar payload em memória e só faz undefer nos vencedores.
+    """
     q = select(Collection).where(Collection.tenant_id == tenant_id, Collection.status == "done")
-    if with_payload:
-        q = q.options(undefer(Collection.payload))
     best: dict[str, Collection] = {}
     rank = lambda c: (0 if (c.summary or {}).get("legacy") else 1, _aware(c.collected_at) if c.collected_at else datetime.min.replace(tzinfo=timezone.utc), c.id)
     for c in db.scalars(q):
         cur = best.get(c.account_id)
         if cur is None or rank(c) > rank(cur):
             best[c.account_id] = c
+    if not best:
+        return []
+    if with_payload:
+        winner_ids = [c.id for c in best.values()]
+        loaded = list(db.scalars(select(Collection).options(undefer(Collection.payload)).where(Collection.id.in_(winner_ids))))
+        return sorted(loaded, key=lambda c: c.alias.lower())
     return sorted(best.values(), key=lambda c: c.alias.lower())
 
 
@@ -115,16 +122,17 @@ def refresh_findings(db: Session, tenant_id: int, trigger_col: Collection | None
     db.commit()
     if trigger_col is not None and st is not None:  # primeira consolidação não alerta (seria tudo "novo")
         cfg = db.get(TenantSetting, tenant_id)
-        if cfg and cfg.teams_webhook:
+        webhook = decrypt_secret(cfg.teams_webhook) if cfg else None
+        if cfg and webhook:
             closed = closed_findings(db, tenant_id)
             new = [f for f in found if f["id"] not in before and f["id"] not in closed and f["sev"] in (cfg.alert_severities or [])]
             tenant = db.get(Tenant, tenant_id)
             if new:
-                alerts.send(cfg.teams_webhook, f"{len(new)} novo(s) achado(s) em {tenant.name}",
+                alerts.send(webhook, f"{len(new)} novo(s) achado(s) em {tenant.name}",
                             f"Após a coleta da conta {trigger_col.alias} ({trigger_col.account_id})", items=new)
             d = trigger_col.diff or {}
             if cfg.alert_on_changes and not d.get("baseline") and (d.get("added") or d.get("removed") or d.get("changed")):
-                alerts.send(cfg.teams_webhook, f"Mudanças na conta {trigger_col.alias}", tenant.name,
+                alerts.send(webhook, f"Mudanças na conta {trigger_col.alias}", tenant.name,
                             facts=[("Novos", str(d.get("added", 0))), ("Removidos", str(d.get("removed", 0))), ("Alterados", str(d.get("changed", 0)))])
     return found
 
@@ -166,9 +174,10 @@ def run_collection(collection_id: int):
         col.status, col.error, col.finished_at = "failed", str(e)[:2000], utcnow()
         db.commit()
         cfg = db.get(TenantSetting, col.tenant_id)
-        if cfg and cfg.teams_webhook and cfg.alert_on_failure:
+        webhook = decrypt_secret(cfg.teams_webhook) if cfg else None
+        if cfg and webhook and cfg.alert_on_failure:
             t = db.get(Tenant, col.tenant_id)
-            alerts.send(cfg.teams_webhook, f"Falha na coleta da conta {col.alias}", t.name if t else "",
+            alerts.send(webhook, f"Falha na coleta da conta {col.alias}", t.name if t else "",
                         facts=[("Conta", col.account_id), ("Erro", str(e)[:300])])
     finally:
         db.close()

@@ -14,6 +14,7 @@ from ..config import settings
 from ..db import get_db
 from ..deps import Ctx, ready_user, superadmin, tenant_ctx
 from ..models import AuditLog, Schedule, TenantSetting, User
+from ..security import decrypt_secret, encrypt_secret
 from ..services import alerts
 
 router = APIRouter(tags=["ops"])
@@ -106,7 +107,8 @@ def mask(url: str | None) -> str | None:
 @router.get("/api/tenants/{tenant_id}/settings")
 def get_settings(c: Ctx = Depends(tenant_ctx("admin"))):
     s = _cfg(c)
-    return {"teams_webhook": mask(s.teams_webhook), "teams_configured": bool(s.teams_webhook), "alert_severities": s.alert_severities,
+    raw_wh = decrypt_secret(s.teams_webhook)
+    return {"teams_webhook": mask(raw_wh), "teams_configured": bool(raw_wh), "alert_severities": s.alert_severities,
             "alert_on_failure": s.alert_on_failure, "alert_on_changes": s.alert_on_changes}
 
 
@@ -117,7 +119,7 @@ def put_settings(body: SettingsIn, c: Ctx = Depends(tenant_ctx("admin"))):
         url = body.teams_webhook.strip()
         if url and not re.match(r"^https://[\w.-]+\.(office\.com|office365\.com|microsoft\.com|logic\.azure\.com|powerplatform\.com|powerautomate\.com)(:\d+)?/", url):
             raise HTTPException(400, "URL de webhook do Teams inválida (Workflows/Power Automate ou conector de entrada do Teams).")
-        s.teams_webhook = url or None
+        s.teams_webhook = encrypt_secret(url) if url else None
     if any(x not in ("critical", "high", "medium", "low", "info") for x in body.alert_severities):
         raise HTTPException(400, "Severidade inválida.")
     s.alert_severities, s.alert_on_failure, s.alert_on_changes = body.alert_severities, body.alert_on_failure, body.alert_on_changes
@@ -129,7 +131,7 @@ def put_settings(body: SettingsIn, c: Ctx = Depends(tenant_ctx("admin"))):
 @router.post("/api/tenants/{tenant_id}/settings/test-teams")
 def test_teams(c: Ctx = Depends(tenant_ctx("admin"))):
     s = _cfg(c)
-    ok, msg = alerts.send(s.teams_webhook, f"Teste de alerta — {c.tenant.name}", f"Enviado por {c.user.email} pelo {settings.app_name}.",
+    ok, msg = alerts.send(decrypt_secret(s.teams_webhook), f"Teste de alerta — {c.tenant.name}", f"Enviado por {c.user.email} pelo {settings.app_name}.",
                           facts=[("Cliente", c.tenant.name), ("Severidades alertadas", ", ".join(s.alert_severities))])
     return {"ok": ok, "message": "Mensagem enviada ao Teams." if ok else msg}
 

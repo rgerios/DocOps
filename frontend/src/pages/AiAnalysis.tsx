@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { api, can } from '../api'
+import { api, can, escHtml, exportPdf, fmtDT } from '../api'
 import { useTenant } from '../App'
 import { Btn, Card, Empty, ErrorBox, Field, PageHead, Pill, useLoad, useToast } from '../ui'
 
@@ -28,6 +28,15 @@ interface Msg {
   meta?: string
 }
 
+interface ConvSummary {
+  id: number
+  title: string
+  provider: string
+  model: string
+  message_count: number
+  updated_at: string
+}
+
 const QUICK_PROMPTS = [
   'Quantas instâncias EC2 tenho em todo o ambiente, separadas por conta, região, tipo e estado (running/stopped)?',
   'Quais são os principais alvos de economia financeira (FinOps / Well-Architected: gp2→gp3, gerações antigas, Compute Optimizer, Savings Plans, S3 lifecycle)?',
@@ -39,7 +48,9 @@ export default function AiAnalysis() {
   const { tenant, role } = useTenant()
   const toast = useToast()
   const isAdmin = can(role, 'admin')
+  const isAnalyst = can(role, 'analyst')
   const { data, error, reload } = useLoad<AIConfigRes>(() => api(`/api/tenants/${tenant.id}/ai/config`), [tenant.id])
+  const { data: historyList, reload: reloadHistory } = useLoad<ConvSummary[]>(() => api(`/api/tenants/${tenant.id}/ai/history`), [tenant.id])
 
   const [provider, setProvider] = useState<ProviderId>('gpt')
   const [model, setModel] = useState('gpt-4o-mini')
@@ -49,7 +60,14 @@ export default function AiAnalysis() {
 
   const [question, setQuestion] = useState('')
   const [messages, setMessages] = useState<Msg[]>([])
+  const [convId, setConvId] = useState<number | null>(null)
   const [asking, setAsking] = useState(false)
+  const [pdfBusy, setPdfBusy] = useState(false)
+
+  useEffect(() => {
+    setMessages([])
+    setConvId(null)
+  }, [tenant.id])
 
   useEffect(() => {
     if (!data) return
@@ -106,6 +124,59 @@ export default function AiAnalysis() {
     }
   }
 
+  const loadConv = async (id: number) => {
+    try {
+      const r = await api<{ id: number; messages: { role: 'user' | 'assistant'; content: string; provider?: string; model?: string }[] }>(`/api/tenants/${tenant.id}/ai/history/${id}`)
+      setConvId(r.id)
+      setMessages((r.messages || []).map((m) => ({
+        role: m.role,
+        content: m.content,
+        meta: m.provider ? `${data?.providers?.[m.provider as ProviderId]?.label || m.provider} · ${m.model || ''}` : undefined,
+      })))
+    } catch (e: any) { toast(e.message, 'err') }
+  }
+
+  const removeConv = async (id: number) => {
+    try {
+      await api(`/api/tenants/${tenant.id}/ai/history/${id}`, { method: 'DELETE' })
+      if (convId === id) { setConvId(null); setMessages([]) }
+      reloadHistory()
+      toast('Conversa excluída')
+    } catch (e: any) { toast(e.message, 'err') }
+  }
+
+  const exportChatPdf = async () => {
+    if (!messages.length) return
+    setPdfBusy(true)
+    try {
+      const brand = tenant.color || '#2563eb'
+      const bodyHtml = messages.map((m) => `
+        <div class="msg ${m.role}">
+          <div class="mh"><b>${m.role === 'user' ? 'Pergunta' : 'IA Analisando'}</b>${m.meta ? ` <span>${escHtml(m.meta)}</span>` : ''}</div>
+          <div class="mb">${escHtml(m.content).replace(/\n/g, '<br>')}</div>
+        </div>`).join('')
+      const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><style>
+        @page { size: A4; margin: 16mm; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #0f172a; font-size: 11px; line-height: 1.5; }
+        .hdr { border-left: 5px solid ${brand}; padding-left: 12px; margin-bottom: 18px; }
+        .hdr h1 { margin: 0 0 4px; font-size: 18px; } .hdr p { margin: 0; color: #475569; }
+        .msg { border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; page-break-inside: avoid; }
+        .msg.user { background: #eff6ff; border-color: #bfdbfe; }
+        .msg.assistant { background: #f8fafc; }
+        .mh { margin-bottom: 6px; font-size: 10px; color: #475569; } .mh b { color: #0f172a; font-size: 11px; }
+        .mb { white-space: pre-wrap; word-break: break-word; }
+      </style></head><body>
+        <div class="hdr">
+          <h1>Análise IA — ${escHtml(tenant.name)}</h1>
+          <p>Exportado em ${escHtml(fmtDT(new Date().toISOString()))} · ${messages.length} mensagem(ns)</p>
+        </div>
+        ${bodyHtml}
+      </body></html>`
+      await exportPdf(tenant.id, html, `Analise_IA_${tenant.slug || tenant.id}.pdf`)
+      toast('PDF da análise exportado')
+    } catch (e: any) { toast(e.message, 'err') } finally { setPdfBusy(false) }
+  }
+
   const ask = async (text?: string) => {
     const q = (text ?? question).trim()
     if (!q || asking) return
@@ -114,9 +185,10 @@ export default function AiAnalysis() {
     if (!text) setQuestion('')
     setAsking(true)
     try {
-      const r = await api<{ answer: string; provider: string; model: string }>(`/api/tenants/${tenant.id}/ai/ask`, {
+      const r = await api<{ answer: string; provider: string; model: string; conversation_id?: number }>(`/api/tenants/${tenant.id}/ai/ask`, {
         body: {
           question: q,
+          conversation_id: convId,
           history: messages.slice(-8).map((m) => ({ role: m.role, content: m.content })),
           provider,
           model,
@@ -126,6 +198,8 @@ export default function AiAnalysis() {
       })
       const label = data?.providers?.[r.provider as ProviderId]?.label || r.provider
       setMessages([...nextHistory, { role: 'assistant', content: r.answer, meta: `${label} · ${r.model}` }])
+      if (r.conversation_id) setConvId(r.conversation_id)
+      reloadHistory()
     } catch (e: any) {
       toast(e.message, 'err')
       setMessages([...nextHistory, { role: 'assistant', content: `Não foi possível concluir a análise: ${e.message}` }])
@@ -142,7 +216,10 @@ export default function AiAnalysis() {
       <PageHead
         title="IA Analisando"
         sub={`Converse com uma IA sobre o inventário AWS real de ${tenant.name} usando Copilot, OpenRouter, Gemini, GPT ou LLM Local.`}
-        actions={messages.length > 0 && <Btn onClick={() => setMessages([])}>Limpar conversa</Btn>}
+        actions={messages.length > 0 && <>
+          <Btn busy={pdfBusy} onClick={exportChatPdf}>Exportar PDF</Btn>
+          <Btn onClick={() => { setMessages([]); setConvId(null) }}>Nova conversa</Btn>
+        </>}
       />
       <ErrorBox error={error} />
 
@@ -161,6 +238,7 @@ export default function AiAnalysis() {
       )}
 
       <div className="ai-layout">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <Card title="Provedor e Chave API">
           <Field label="Provedor de IA">
             <select value={provider} onChange={(e) => changeProvider(e.target.value as ProviderId)}>
@@ -198,6 +276,30 @@ export default function AiAnalysis() {
             </div>
           )}
         </Card>
+
+        <Card title="Histórico de análises" actions={convId && <Btn small kind="ghost" onClick={() => { setConvId(null); setMessages([]) }}>Nova</Btn>}>
+          {!historyList?.length ? (
+            <p className="muted small">As conversas feitas com a IA ficam salvas aqui automaticamente.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {historyList.map((h) => (
+                <div key={h.id} className="row" style={{
+                  justifyContent: 'space-between', padding: '6px 8px', borderRadius: 6,
+                  border: '1px solid var(--line)', background: convId === h.id ? 'var(--tint)' : 'transparent',
+                }}>
+                  <button type="button" onClick={() => loadConv(h.id)} style={{
+                    all: 'unset', cursor: 'pointer', flex: 1, minWidth: 0,
+                  }}>
+                    <div style={{ fontWeight: 600, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.title}</div>
+                    <div className="muted small">{h.model || h.provider} · {fmtDT(h.updated_at)}</div>
+                  </button>
+                  {isAnalyst && <Btn small kind="ghost" onClick={() => removeConv(h.id)} title="Excluir conversa">×</Btn>}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+        </div>
 
         <Card title="Análise do ambiente" actions={s?.accounts ? <Pill kind="ok">Inventário pronto</Pill> : <Pill kind="warn">Sem coletas</Pill>}>
           {!s?.accounts ? (

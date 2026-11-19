@@ -1,8 +1,9 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import select, text
 
 from . import models  # noqa: F401  (registra as tabelas)
@@ -49,6 +50,15 @@ def health():
     return {"ok": True, "app": settings.app_name}
 
 
+@app.get("/api/collector.py")
+def download_collector():
+    """Serve o coletor único (Single Source of Truth) para execução manual no AWS CloudShell."""
+    path = Path(__file__).resolve().parent / "services" / "collector.py"
+    if not path.is_file():
+        raise HTTPException(404, "Coletor não encontrado.")
+    return FileResponse(path, media_type="text/x-python", filename="docviva_collector.py")
+
+
 def bootstrap():
     """Cria as tabelas e o primeiro administrador (só quando o banco ainda não tem usuários)."""
     if settings.environment == "production" and (
@@ -56,6 +66,12 @@ def bootstrap():
     ):
         raise RuntimeError("SECRET_KEY insegura ou padrão em produção. Defina uma chave forte (>= 32 caracteres) no .env.")
     Base.metadata.create_all(engine)
+    if engine.dialect.name == "postgresql":
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE users ALTER COLUMN totp_secret TYPE TEXT"))
+        except Exception:
+            pass
     with SessionLocal() as db:
         if db.scalar(select(User).limit(1)):
             return

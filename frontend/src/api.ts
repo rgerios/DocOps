@@ -49,6 +49,14 @@ export function downloadBlob(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(a.href), 4000)
 }
 
+export const escHtml = (s: unknown) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+export async function exportPdf(tenantId: number, html: string, filename: string) {
+  const res = await api<Response>(`/api/tenants/${tenantId}/reports/pdf`, { body: { html, filename }, raw: true })
+  const blob = await res.blob()
+  downloadBlob(blob, filename)
+}
+
 // ── tipos ──
 export type Role = 'client' | 'viewer' | 'analyst' | 'admin'
 export const ROLE_LABEL: Record<Role, string> = { admin: 'Administrador', analyst: 'Analista', viewer: 'Leitor', client: 'Cliente' }
