@@ -16,6 +16,13 @@
 
 ---
 
+### 2026-11-19 — Rollback do Redesign na `main` (PRD preservado) + Fluxo HML → PRD
+- **UI / Governança de Release**:
+  - Restaurado o visual original de PRD (`frontend/src/App.tsx`, `frontend/src/pages/FinOps.tsx`, `frontend/src/styles.css` do commit `4d15a3d`) na branch `main`, preservando a estrutura isolada de HML (`docker-compose.hml.yml`, `scripts/deploy.sh`) e a documentação.
+  - Adotado fluxo com branch `hml` dedicada para testar novas evoluções de interface antes de promover para `main` (PRD).
+
+---
+
 ### 2026-11-19 — Ambiente Isolado de HML + CLI de Deploy/Rollback
 - **Infraestrutura / Docker Compose (`docker-compose.hml.yml`, `deploy/caddy/Caddyfile.hml`, `.env.hml.example`)**:
   - Criada stack completa de Homologação (`name: docops-hml`) 100% isolada de PRD (imagens `docops-hml-*`, banco `docops_hml`, volumes `*_hml`, rede própria e portas `8080` HTTP / `8443` HTTPS).
