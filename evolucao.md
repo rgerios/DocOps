@@ -6,6 +6,17 @@
 
 ## Histórico de Evolução
 
+### 2026-11-19 — 3ª Aba no Panorama (Perfil de Uso & Serviços) + Hover Interativo nos Radares (`hml`)
+- **Backend (`backend/app/services/overview.py`)**:
+  - Adicionado `usageProfile` em `GET /api/tenants/{tenant_id}/overview` com 8 domínios de concentração real de serviços AWS (sem notas de maturidade), participação percentual (`sharePct`), curva de intensidade proporcional (`intensity`) e detecção automática do perfil da conta (*Serverless*, *IaaS EC2/RDS*, *Storage Heavy*, etc.).
+- **Frontend (`frontend/src/pages/Panorama.tsx`, `frontend/src/styles.css`)**:
+  - Criada a 3ª visão **Perfil de Uso & Serviços** com diagrama radial por fatias, 3 anéis concêntricos pontilhados (laranja/verde/azul), divisórias tracejadas com setas, núcleo escuro central e polígono que pende dinamicamente para os serviços mais usados.
+  - Adicionado **hover interativo com tooltip flutuante e destaque de fatia** em todos os 3 radares (*Raio-X*, *Benchmark & Camadas* e *Perfil de Uso*).
+- **Verificação**:
+  - `npm run build` (`tsc -b && vite build`) OK e `pytest` (`19 testes passando`).
+
+---
+
 ### 2026-11-19 — Suporte a Múltiplos IPs no Caddy (`10.10.1.218` + `107.21.233.13`)
 - **Proxy / TLS (`deploy/caddy/Caddyfile`, `deploy/caddy/Caddyfile.hml`, `docker-compose.yml`, `docker-compose.hml.yml`)**:
   - Separada a diretiva `default_sni {$DOCOPS_DEFAULT_SNI}` de `DOCOPS_HOST` para permitir múltiplos IPs/hosts simultâneos sem erro de inicialização no Caddy.

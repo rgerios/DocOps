@@ -568,6 +568,103 @@ def build_overview(cols: list[Any], findings: list[dict], account_id: str | None
             "cta": "Ver no Explorer",
         })
 
+    # ── Perfil de Uso & Serviços (sem maturidade — apenas concentração real de uso) ──
+    raw_domains = [
+        ("compute", "Computação (EC2)", "EC2 & Compute", [
+            ("EC2", m["ec2"]),
+            ("EBS", m["ebs"]),
+        ]),
+        ("serverless", "Serverless & Containers", "Serverless", [
+            ("Lambda", m["lambda"]),
+            ("ECS", m["ecs"]),
+            ("EKS", m["eks"]),
+            ("ECR", m["ecr"]),
+        ]),
+        ("database", "Bancos de Dados", "Bancos", [
+            ("RDS", m["rds"]),
+            ("DynamoDB", m["dynamodb"]),
+            ("ElastiCache", m["elasticache"]),
+        ]),
+        ("storage", "Armazenamento", "Storage", [
+            ("S3", m["s3"]),
+            ("EFS", m["efs"]),
+            ("Backup", m["backup_plans"]),
+        ]),
+        ("network", "Redes & Borda", "Redes & CDN", [
+            ("VPC", m["vpcs"]),
+            ("ALB/NLB", m["albs"]),
+            ("NAT GW", m["nat_gws"]),
+            ("Route 53", m["route53"]),
+            ("CloudFront", m["cloudfront"]),
+            ("VPN/TGW", m["vpns"] + m["tgws"]),
+            ("EIP", m["eips"]),
+        ]),
+        ("observability", "Observabilidade & Logs", "Logs & Monitor", [
+            ("Log Groups", m["log_groups"]),
+            ("CW Alarms", m["cw_alarms"]),
+            ("CloudTrail", m["cloudtrail"]),
+            ("Flow Logs", m["vpcs_flow_logs"]),
+        ]),
+        ("security", "Segurança & Identidade", "Segurança", [
+            ("IAM Users", m["iam_users"]),
+            ("KMS", m["kms"]),
+            ("WAF v2", m["waf"]),
+            ("ACM", m["acm"]),
+            ("GuardDuty", m["guardduty"]),
+            ("Security Hub", m["securityhub"]),
+        ]),
+        ("integration", "APIs & Governança", "APIs & Gov.", [
+            ("API Gateway", m["apigw"]),
+            ("AWS Config", m["config_enabled"]),
+            ("Savings Plans", 1 if m["has_sp"] else 0),
+        ]),
+    ]
+
+    domain_totals = [sum(cnt for _, cnt in svcs) for _, _, _, svcs in raw_domains]
+    grand_total = sum(domain_totals)
+    max_dom = max(domain_totals) if domain_totals else 0
+
+    usage_domains = []
+    for (did, dname, dshort, svcs), cnt in zip(raw_domains, domain_totals):
+        share_pct = round((cnt / grand_total) * 100, 1) if grand_total > 0 else 0.0
+        # Curva proporcional ao maior domínio (pende claramente para os serviços mais usados)
+        intensity = _clamp(((cnt / max_dom) ** 0.65) * 96) if (max_dom > 0 and cnt > 0) else 0
+        active_svcs = [{"name": n, "count": c} for n, c in sorted(svcs, key=lambda x: -x[1]) if c > 0]
+        usage_domains.append({
+            "id": did,
+            "name": dname,
+            "shortName": dshort,
+            "count": cnt,
+            "sharePct": share_pct,
+            "intensity": intensity,
+            "services": active_svcs,
+            "allServices": [{"name": n, "count": c} for n, c in svcs],
+        })
+
+    top_dom = max(usage_domains, key=lambda x: x["count"]) if usage_domains else None
+    if not top_dom or top_dom["count"] == 0:
+        profile_label = "Sem recursos detectados"
+    elif top_dom["id"] == "serverless":
+        profile_label = "Perfil Serverless / Cloud-Native"
+    elif top_dom["id"] in ("compute", "database"):
+        profile_label = "Perfil IaaS / Workloads Gerenciados (EC2 & RDS)"
+    elif top_dom["id"] == "storage":
+        profile_label = "Perfil Data & Storage Heavy"
+    elif top_dom["id"] == "network":
+        profile_label = "Perfil Conectividade & Borda"
+    elif top_dom["id"] == "observability":
+        profile_label = "Perfil Alta Telemetria & Logs"
+    else:
+        profile_label = f"Perfil Predominante: {top_dom['name']}"
+
+    usage_profile = {
+        "totalResources": grand_total,
+        "dominantDomain": top_dom["name"] if (top_dom and top_dom["count"] > 0) else "—",
+        "dominantSharePct": top_dom["sharePct"] if (top_dom and top_dom["count"] > 0) else 0.0,
+        "profileLabel": profile_label,
+        "domains": usage_domains,
+    }
+
     return {
         "hasData": len(sel_cols) > 0,
         "accountId": cur_id,
@@ -587,6 +684,7 @@ def build_overview(cols: list[Any], findings: list[dict], account_id: str | None
         "pillars": pillars,
         "layers": layers,
         "insights": insights,
+        "usageProfile": usage_profile,
     }
 
 

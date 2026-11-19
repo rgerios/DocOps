@@ -386,6 +386,10 @@ def test_overview_and_assets_endpoints(client, admin, tenant):
         assert p["status"] in ("high", "moderate", "suboptimal", "critical")
         assert isinstance(p["services"], list) and len(p["services"]) >= 1
     assert set(body["layers"].keys()) == {"core", "governance", "ecosystem"}
+    up = body["usageProfile"]
+    assert up["totalResources"] > 0
+    assert len(up["domains"]) == 8
+    assert all("count" in d and "sharePct" in d and "intensity" in d for d in up["domains"])
 
     assets = client.get(f"/api/tenants/{t}/assets")
     assert assets.status_code == 200, assets.text
