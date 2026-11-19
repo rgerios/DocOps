@@ -6,11 +6,43 @@
 
 ## Histórico de Evolução
 
+### 2026-11-19 — 3ª Aba no Panorama (Perfil de Uso & Serviços) + Hover Interativo nos Radares (`hml`)
+- **Backend (`backend/app/services/overview.py`)**:
+  - Adicionado `usageProfile` em `GET /api/tenants/{tenant_id}/overview` com 8 domínios de concentração real de serviços AWS (sem notas de maturidade), participação percentual (`sharePct`), curva de intensidade proporcional (`intensity`) e detecção automática do perfil da conta (*Serverless*, *IaaS EC2/RDS*, *Storage Heavy*, etc.).
+- **Frontend (`frontend/src/pages/Panorama.tsx`, `frontend/src/styles.css`)**:
+  - Criada a 3ª visão **Perfil de Uso & Serviços** com diagrama radial por fatias, 3 anéis concêntricos pontilhados (laranja/verde/azul), divisórias tracejadas com setas, núcleo escuro central e polígono que pende dinamicamente para os serviços mais usados.
+  - Adicionado **hover interativo com tooltip flutuante e destaque de fatia** em todos os 3 radares (*Raio-X*, *Benchmark & Camadas* e *Perfil de Uso*).
+- **Verificação**:
+  - `npm run build` (`tsc -b && vite build`) OK e `pytest` (`19 testes passando`).
+
+---
+
+### 2026-11-19 — Suporte a Múltiplos IPs no Caddy (`10.10.1.218` + `107.21.233.13`)
+- **Proxy / TLS (`deploy/caddy/Caddyfile`, `deploy/caddy/Caddyfile.hml`, `docker-compose.yml`, `docker-compose.hml.yml`)**:
+  - Separada a diretiva `default_sni {$DOCOPS_DEFAULT_SNI}` de `DOCOPS_HOST` para permitir múltiplos IPs/hosts simultâneos sem erro de inicialização no Caddy.
+  - Configurados os valores padrão com IP interno (`10.10.1.218`) e IP externo (`107.21.233.13`) em `.env.example`, `.env.hml.example` e `instrucoes.md`.
+
+---
+
+### 2026-11-19 — Panorama Geral (Raio-X 8 Pilares + Benchmark/Camadas) e Infraestrutura & Assets (`hml`)
+- **Backend (`backend/app/services/overview.py`, `backend/app/routers/data.py`)**:
+  - Novo endpoint `GET /api/tenants/{tenant_id}/overview` calculando em tempo real sobre as coletas vigentes e achados os **8 pilares AWS (0–100)** (`Computação`, `Armazenamento`, `Bancos de Dados`, `Redes`, `Observabilidade`, `Governança`, `FinOps`, `Segurança Borda`), status por serviço, recomendações acionáveis, 3 camadas concêntricas (`core`, `governance`, `ecosystem`) e diagnósticos executivos.
+  - Novo endpoint `GET /api/tenants/{tenant_id}/assets` entregando inventário tabular unificado de recursos AWS (EC2, S3, RDS, EBS, VPC, Lambda, ALB/NLB, EIP) com status operacional, tags e achados vinculados.
+- **Frontend (`frontend/src/pages/Panorama.tsx`, `frontend/src/pages/Assets.tsx`, `frontend/src/App.tsx`, `frontend/src/styles.css`)**:
+  - Nova aba **Panorama** (`/t/:tid/panorama`) com duas visões: **Raio-X da Conta** (Radar Poligonal SVG interativo de 8 eixos + Inspector lateral contextual) e **Benchmark Setorial & Camadas Concêntricas** (diagrama concêntrico multicamadas SVG com malha pontilhada de mercado + barras comparativas Conta × Mercado + Diagnóstico Automatizado).
+  - Nova aba **Assets** (`/t/:tid/assets`) com filtros rápidos por tipo/status, busca por tags, paginação e modal técnico detalhado.
+  - 100% compatível com o tema dinâmico por cliente (`--brand` / `--brand-600`).
+- **Verificação**:
+  - `npm run build` (`tsc -b && vite build`) OK e `pytest` (`19 testes passando`).
+
+---
+
 ### 2026-11-19 — Rollback do Redesign na `main` e Fluxo de Branches `hml` → `main`
 - **UI / Rollback**:
   - Restaurado o visual original de PRD (`frontend/src/App.tsx`, `frontend/src/styles.css`, `frontend/src/pages/FinOps.tsx` do commit `4d15a3d`) na branch `main`, mantendo a estrutura de containers HML/PRD (`docker-compose.hml.yml`, `scripts/deploy.sh`) e a documentação.
-- **Fluxo de Deploy**:
+- **Fluxo de Deploy e Guia Operacional (`instrucoes.md`)**:
   - Criada branch dedicada `hml` para testar novas ideias de UI e funcionalidades em homologação (`https://10.10.1.218:8443`) antes de promover para `main` (PRD).
+  - Criado `instrucoes.md` com tabela comparativa PRD vs HML, portas (`80/443` e `8080/8443`), comandos do `./scripts/deploy.sh`, clonagem de banco, logs e rollback.
 - **Verificação**:
   - `npm run build` (`tsc -b && vite build`) validado com sucesso (0 erros).
 
