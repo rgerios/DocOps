@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, downloadBlob, fmtDT } from '../api'
 import { useTenant } from '../App'
+import { computeViewerThemeVars } from '../theme'
 import { Btn, Pill, useToast } from '../ui'
 
 interface VersionItem {
@@ -57,7 +58,10 @@ export default function Explorer() {
       setIsHistorical(anyHistorical)
 
       if (readyRef.current) {
-        frame.current?.contentWindow?.postMessage({ type: 'docops:load', ...inv }, location.origin)
+        frame.current?.contentWindow?.postMessage(
+          { type: 'docops:load', ...inv, theme: computeViewerThemeVars(tenant.color) },
+          location.origin,
+        )
       }
       setState('ready')
     } catch (e: any) {
@@ -65,7 +69,16 @@ export default function Explorer() {
       setState('error')
       toast(e.message, 'err')
     }
-  }, [tenant.id, toast])
+  }, [tenant.id, tenant.color, toast])
+
+  useEffect(() => {
+    if (readyRef.current) {
+      frame.current?.contentWindow?.postMessage(
+        { type: 'docops:theme', theme: computeViewerThemeVars(tenant.color) },
+        location.origin,
+      )
+    }
+  }, [tenant.color])
 
   useEffect(() => {
     const onMsg = async (e: MessageEvent) => {

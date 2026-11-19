@@ -54,16 +54,10 @@ export function resetTenantTheme() {
   for (const k of THEME_KEYS) root.removeProperty(k)
 }
 
-export function applyTenantTheme(hex?: string | null) {
-  if (!hex || hex.toLowerCase() === DEFAULT_TENANT_COLOR) {
-    resetTenantTheme()
-    return
-  }
+export function computeTenantVars(hex?: string | null): Record<string, string> | null {
+  if (!hex || hex.toLowerCase() === DEFAULT_TENANT_COLOR) return null
   const parsed = hexToHsl(hex)
-  if (!parsed) {
-    resetTenantTheme()
-    return
-  }
+  if (!parsed) return null
   const [h, rawS, rawL] = parsed
   // Normaliza saturação e luminosidade para manter contraste legível em qualquer cor escolhida
   const s = Math.max(12, Math.min(78, rawS))
@@ -72,22 +66,50 @@ export function applyTenantTheme(hex?: string | null) {
   const softS = Math.min(48, Math.max(14, Math.round(s * 0.65)))
   const tintS = Math.min(28, Math.max(8, Math.round(s * 0.35)))
 
+  return {
+    '--g-950': hsl(h, darkS, 12),
+    '--g-900': hsl(h, darkS, 17),
+    '--g-800': hsl(h, darkS, 23),
+    '--g-700': hsl(h, Math.min(68, Math.round(s * 0.85)), Math.max(26, brandL - 8)),
+    '--brand': hsl(h, s, Math.min(54, brandL + 5)),
+    '--brand-600': hsl(h, s, brandL),
+    '--leaf': hsl(h, s, Math.min(58, brandL + 9)),
+    '--pastel': hsl(h, softS, 68),
+    '--pastel-300': hsl(h, softS, 80),
+    '--pastel-100': hsl(h, softS, 91),
+    '--pastel-50': hsl(h, softS, 96),
+    '--bg': hsl(h, tintS, 97),
+    '--line': hsl(h, tintS, 89),
+    '--line-2': hsl(h, tintS, 93),
+  }
+}
+
+export function computeViewerThemeVars(hex?: string | null): Record<string, string> | null {
+  const v = computeTenantVars(hex)
+  if (!v) return null
+  return {
+    '--navy-950': v['--g-950'],
+    '--navy-900': v['--g-900'],
+    '--navy-800': v['--g-800'],
+    '--navy-700': v['--g-700'],
+    '--brand': v['--brand'],
+    '--brand-600': v['--brand-600'],
+    '--lav': v['--pastel'],
+    '--lav-300': v['--pastel-300'],
+    '--lav-100': v['--pastel-100'],
+    '--lav-50': v['--pastel-50'],
+    '--bg': v['--bg'],
+    '--line': v['--line'],
+    '--line-2': v['--line-2'],
+  }
+}
+
+export function applyTenantTheme(hex?: string | null) {
+  const vars = computeTenantVars(hex)
+  if (!vars) {
+    resetTenantTheme()
+    return
+  }
   const root = document.documentElement.style
-  root.setProperty('--g-950', hsl(h, darkS, 12))
-  root.setProperty('--g-900', hsl(h, darkS, 17))
-  root.setProperty('--g-800', hsl(h, darkS, 23))
-  root.setProperty('--g-700', hsl(h, Math.min(68, Math.round(s * 0.85)), Math.max(26, brandL - 8)))
-
-  root.setProperty('--brand', hsl(h, s, Math.min(54, brandL + 5)))
-  root.setProperty('--brand-600', hsl(h, s, brandL))
-  root.setProperty('--leaf', hsl(h, s, Math.min(58, brandL + 9)))
-
-  root.setProperty('--pastel', hsl(h, softS, 68))
-  root.setProperty('--pastel-300', hsl(h, softS, 80))
-  root.setProperty('--pastel-100', hsl(h, softS, 91))
-  root.setProperty('--pastel-50', hsl(h, softS, 96))
-
-  root.setProperty('--bg', hsl(h, tintS, 97))
-  root.setProperty('--line', hsl(h, tintS, 89))
-  root.setProperty('--line-2', hsl(h, tintS, 93))
+  for (const [k, val] of Object.entries(vars)) root.setProperty(k, val)
 }
