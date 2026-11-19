@@ -169,7 +169,7 @@ export default function FinOps() {
 
       {s && (
         <div className="ai-kpis">
-          <div className="kpi">
+          <div className="kpi accent">
             <span>Economia estimada (AWS)</span>
             <b>{s.estimated_monthly_savings_usd > 0 ? `US$ ${s.estimated_monthly_savings_usd}` : '—'}</b>
             <small>Compute Optimizer + Savings Plans/mês</small>

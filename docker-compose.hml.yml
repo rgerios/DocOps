@@ -1,0 +1,118 @@
+# DocOps — Ambiente de Homologação (HML) totalmente isolado de PRD.
+# Suba com:  ./scripts/deploy.sh hml
+# Ou direto: docker compose -f docker-compose.hml.yml --env-file .env.hml up -d --build
+name: docops-hml
+
+x-backend-hml: &backend-hml
+  build: ./backend
+  image: docops-hml-backend:latest
+  env_file: .env.hml
+  environment:
+    DATABASE_URL: postgresql+psycopg://docops:${POSTGRES_PASSWORD}@db:5432/docops_hml
+    REDIS_URL: redis://redis:6379/0
+    TZ: ${TIMEZONE:-America/Sao_Paulo}
+  depends_on:
+    db: { condition: service_healthy }
+    redis: { condition: service_healthy }
+  restart: unless-stopped
+  networks: [internal]
+  logging: &logging
+    driver: json-file
+    options: { max-size: "20m", max-file: "3" }
+
+services:
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "${HML_HTTP_PORT:-8080}:80"
+      - "${HML_HTTPS_PORT:-8443}:443"
+    environment:
+      DOCOPS_HOST: ${DOCOPS_HOST:-localhost}
+      HML_HTTPS_PORT: ${HML_HTTPS_PORT:-8443}
+    volumes:
+      - ./deploy/caddy/Caddyfile.hml:/etc/caddy/Caddyfile:ro
+      - caddy_data_hml:/data
+      - caddy_config_hml:/config
+    depends_on: [frontend, backend]
+    networks: [edge, internal]
+    logging: *logging
+
+  frontend:
+    build: ./frontend
+    image: docops-hml-frontend:latest
+    restart: unless-stopped
+    networks: [internal]
+    logging: *logging
+
+  backend:
+    <<: *backend-hml
+
+  worker:
+    <<: *backend-hml
+    command: ["python", "-m", "app.worker"]
+    healthcheck: { disable: true }
+
+  scheduler:
+    <<: *backend-hml
+    command: ["python", "-m", "app.scheduler"]
+    healthcheck: { disable: true }
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: docops_hml
+      POSTGRES_USER: docops
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes: [pgdata_hml:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docops -d docops_hml"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+    logging: *logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "100"]
+    volumes: [redisdata_hml:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+    logging: *logging
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    entrypoint: ["sh", "/scripts/backup.sh"]
+    environment:
+      PGHOST: db
+      PGUSER: docops
+      PGDATABASE: docops_hml
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_HOUR: ${BACKUP_HOUR:-3}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+      TZ: ${TIMEZONE:-America/Sao_Paulo}
+    volumes:
+      - ./scripts/backup.sh:/scripts/backup.sh:ro
+      - ${BACKUP_DIR:-./backups-hml}:/backups
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [internal]
+    logging: *logging
+
+networks:
+  edge: {}
+  internal: {}
+
+volumes:
+  pgdata_hml: {}
+  redisdata_hml: {}
+  caddy_data_hml: {}
+  caddy_config_hml: {}

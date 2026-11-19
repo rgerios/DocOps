@@ -1,0 +1,42 @@
+# Proxy de entrada do DocOps — Ambiente de Homologação (HML).
+# Escuta internamente nas portas 80 e 443 (mapeadas para HML_HTTP_PORT e HML_HTTPS_PORT no host).
+# Redireciona HTTP explicitamente para a porta HTTPS de HML para nunca redirecionar para PRD (443).
+{
+	admin off
+	default_sni {$DOCOPS_HOST}
+	auto_https disable_redirects
+}
+
+http:// {
+	redir https://{host}:{$HML_HTTPS_PORT:8443}{uri} permanent
+}
+
+{$DOCOPS_HOST} {
+	tls internal
+
+	encode zstd gzip
+	request_body {
+		max_size 250MB
+	}
+
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'"
+		X-DocOps-Env "hml"
+		-Server
+	}
+
+	handle /api/* {
+		reverse_proxy backend:8000 {
+			transport http {
+				read_timeout 10m
+			}
+		}
+	}
+	handle {
+		reverse_proxy frontend:80
+	}
+}
