@@ -10,7 +10,8 @@ Os dois ambientes rodam no mesmo servidor (`10.10.1.218`, diretório `/home/ubun
 
 | Propriedade | PRD (Produção) | HML (Homologação) |
 |---|---|---|
-| **URL de acesso (HTTPS)** | `https://10.10.1.218` | `https://10.10.1.218:8443` |
+| **URL interna (HTTPS)** | `https://10.10.1.218` | `https://10.10.1.218:8443` |
+| **URL externa (HTTPS)** | `https://107.21.233.13` | `https://107.21.233.13:8443` |
 | **Porta HTTP** | `80` *(redireciona para 443)* | `8080` *(redireciona para 8443)* |
 | **Porta HTTPS** | `443` | `8443` |
 | **Projeto Docker Compose** | `docops` | `docops-hml` |

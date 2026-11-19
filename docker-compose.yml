@@ -25,7 +25,8 @@ services:
     restart: unless-stopped
     ports: ["80:80", "443:443"]
     environment:
-      DOCOPS_HOST: ${DOCOPS_HOST:-localhost}
+      DOCOPS_HOST: ${DOCOPS_HOST:-10.10.1.218, 107.21.233.13}
+      DOCOPS_DEFAULT_SNI: ${DOCOPS_DEFAULT_SNI:-107.21.233.13}
     volumes:
       - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

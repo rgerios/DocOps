@@ -6,6 +6,13 @@
 
 ## Histórico de Evolução
 
+### 2026-11-19 — Suporte a Múltiplos IPs no Caddy (`10.10.1.218` + `107.21.233.13`)
+- **Proxy / TLS (`deploy/caddy/Caddyfile`, `deploy/caddy/Caddyfile.hml`, `docker-compose.yml`, `docker-compose.hml.yml`)**:
+  - Separada a diretiva `default_sni {$DOCOPS_DEFAULT_SNI}` de `DOCOPS_HOST` para permitir múltiplos IPs/hosts simultâneos sem erro de inicialização no Caddy.
+  - Configurados os valores padrão com IP interno (`10.10.1.218`) e IP externo (`107.21.233.13`) em `.env.example`, `.env.hml.example` e `instrucoes.md`.
+
+---
+
 ### 2026-11-19 — Panorama Geral (Raio-X 8 Pilares + Benchmark/Camadas) e Infraestrutura & Assets (`hml`)
 - **Backend (`backend/app/services/overview.py`, `backend/app/routers/data.py`)**:
   - Novo endpoint `GET /api/tenants/{tenant_id}/overview` calculando em tempo real sobre as coletas vigentes e achados os **8 pilares AWS (0–100)** (`Computação`, `Armazenamento`, `Bancos de Dados`, `Redes`, `Observabilidade`, `Governança`, `FinOps`, `Segurança Borda`), status por serviço, recomendações acionáveis, 3 camadas concêntricas (`core`, `governance`, `ecosystem`) e diagnósticos executivos.

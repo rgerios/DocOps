@@ -28,7 +28,8 @@ services:
       - "${HML_HTTP_PORT:-8080}:80"
       - "${HML_HTTPS_PORT:-8443}:443"
     environment:
-      DOCOPS_HOST: ${DOCOPS_HOST:-localhost}
+      DOCOPS_HOST: ${DOCOPS_HOST:-10.10.1.218, 107.21.233.13}
+      DOCOPS_DEFAULT_SNI: ${DOCOPS_DEFAULT_SNI:-107.21.233.13}
       HML_HTTPS_PORT: ${HML_HTTPS_PORT:-8443}
     volumes:
       - ./deploy/caddy/Caddyfile.hml:/etc/caddy/Caddyfile:ro
