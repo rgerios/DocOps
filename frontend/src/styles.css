@@ -58,19 +58,20 @@ code, .mono { font-family: var(--mono); font-size: 12px }
 
 /* moldura */
 .shell { min-height: 100%; display: flex; flex-direction: column }
-.top { height: 58px; background: linear-gradient(90deg, var(--g-800), var(--g-950)); color: #d3e3cc; display: flex; align-items: center; gap: 16px; padding: 0 18px; position: sticky; top: 0; z-index: 30 }
+.top { height: 58px; background: linear-gradient(90deg, var(--g-800), var(--g-950)); color: rgba(255, 255, 255, .86); display: flex; align-items: center; gap: 16px; padding: 0 18px; position: sticky; top: 0; z-index: 30; transition: background .25s ease }
 .brand { display: flex; align-items: center; gap: 12px; cursor: pointer }
 .brand img { height: 34px }
+.brand .brand-client-logo { height: 32px; max-width: 112px; object-fit: contain; background: rgba(255, 255, 255, .94); padding: 3px 7px; border-radius: 7px }
 .brand b { display: block; font: 700 15px var(--head); color: #fff }
-.brand span { font-size: 10.5px; color: #9fb99a }
-.tenant-sel { width: auto !important; min-width: 190px; height: 32px !important; background: rgba(255, 255, 255, .08) !important; border-color: rgba(255, 255, 255, .14) !important; color: #fff; }
+.brand span { font-size: 10.5px; color: rgba(255, 255, 255, .68) }
+.tenant-sel { width: auto !important; min-width: 190px; height: 32px !important; background: rgba(255, 255, 255, .1) !important; border-color: rgba(255, 255, 255, .18) !important; color: #fff; }
 .tenant-sel option { color: var(--ink) }
 .tabs-top { display: flex; gap: 2px; overflow-x: auto }
-.tabs-top a { color: #cfe0c8; text-decoration: none; padding: 7px 11px; border-radius: 8px; font-size: 13px; white-space: nowrap }
-.tabs-top a:hover { background: rgba(255, 255, 255, .07); color: #fff }
-.tabs-top a.active { background: rgba(156, 196, 122, .24); color: #fff }
+.tabs-top a { color: rgba(255, 255, 255, .82); text-decoration: none; padding: 7px 11px; border-radius: 8px; font-size: 13px; white-space: nowrap }
+.tabs-top a:hover { background: rgba(255, 255, 255, .1); color: #fff }
+.tabs-top a.active { background: rgba(255, 255, 255, .2); color: #fff; font-weight: 500 }
 .user { margin-left: auto; display: flex; align-items: center; gap: 10px; position: relative }
-.role-tag { font-size: 11px; color: #9fb99a; border: 1px solid rgba(255, 255, 255, .14); border-radius: 20px; padding: 2px 9px }
+.role-tag { font-size: 11px; color: rgba(255, 255, 255, .78); border: 1px solid rgba(255, 255, 255, .2); border-radius: 20px; padding: 2px 9px }
 .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--pastel); color: var(--g-900); font-weight: 700 }
 .user-pop { position: absolute; right: 0; top: 42px; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(30, 43, 33, .16); padding: 6px; width: 250px }
 .user-pop .who { padding: 8px 10px 10px; border-bottom: 1px solid var(--line-2); margin-bottom: 4px }
@@ -205,3 +206,18 @@ pre.code .copy { position: absolute; top: 8px; right: 8px; color: #cbdcc4; backg
 .ai-table-wrap { overflow-x: auto }
 .ai-input { display: flex; gap: 8px; align-items: flex-end }
 .ai-input textarea { flex: 1; resize: vertical; min-height: 44px }
+
+/* Paleta de cores por cliente */
+.palette-wrap { display: flex; align-items: center; gap: 10px; flex-wrap: wrap }
+.palette-swatches { display: flex; align-items: center; gap: 7px; flex-wrap: wrap }
+.swatch { width: 28px; height: 28px; border-radius: 8px; border: 2px solid rgba(0, 0, 0, .12); transition: transform .12s ease, box-shadow .12s ease }
+.swatch:hover { transform: scale(1.08) }
+.swatch.on { border-color: #fff; box-shadow: 0 0 0 2.5px var(--ink) }
+
+/* paleta de cores por cliente */
+.palette-wrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap }
+.palette-swatches { display: flex; align-items: center; gap: 6px; flex-wrap: wrap }
+.swatch { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .14); transition: transform .12s ease, border-color .12s ease }
+.swatch:hover { transform: scale(1.12) }
+.swatch.on { border-color: var(--ink); transform: scale(1.12); box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--ink) }
+.tenant-logo-sm { height: 22px; max-width: 56px; object-fit: contain; border-radius: 4px; vertical-align: middle; margin-right: 6px; border: 1px solid var(--line); background: #fff; padding: 1px 3px }

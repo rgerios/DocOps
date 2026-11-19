@@ -16,6 +16,17 @@
 
 ---
 
+### 2026-11-19 — Tema Dinâmico + Logo por Cliente (branch `hml`)
+- **Identidade Visual Multi-Tenant (`frontend/src/theme.ts`, `frontend/src/App.tsx`, `frontend/src/pages/Platform.tsx`, `frontend/src/pages/Access.tsx`, `backend/app/routers/auth.py`)**:
+  - Criado motor HSL (`applyTenantTheme` / `resetTenantTheme`) que deriva automaticamente toda a escala de variáveis CSS do DocOps (`--g-950`..`--g-700`, `--brand`, `--brand-600`, `--pastel-*`, `--bg`, `--line-*`) a partir da cor escolhida para cada cliente.
+  - Ao trocar de cliente no seletor do topo, todo o painel (cabeçalho, botões, links, destaques, abas e fundo sutil) reflete instantaneamente a cor daquele cliente, e a logo do cliente aparece no topo quando configurada.
+  - Adicionada paleta de cores rápidas (8 swatches corporativos + seletor livre) e upload de logo já na criação de clientes (**Administração → Clientes**) e com pré-visualização instantânea em **Acessos → Identidade visual do cliente**.
+  - Endpoint `/api/auth/me` atualizado para retornar também `logo` em cada tenant.
+- **Verificação**:
+  - `npm run build` (`tsc -b && vite build`) e `pytest` (**18 testes passando**).
+
+---
+
 ### 2026-11-19 — Rollback do Redesign na `main` (PRD preservado) + Fluxo HML → PRD
 - **UI / Governança de Release**:
   - Restaurado o visual original de PRD (`frontend/src/App.tsx`, `frontend/src/pages/FinOps.tsx`, `frontend/src/styles.css` do commit `4d15a3d`) na branch `main`, preservando a estrutura isolada de HML (`docker-compose.hml.yml`, `scripts/deploy.sh`) e a documentação.
