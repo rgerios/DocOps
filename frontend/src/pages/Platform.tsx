@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { ago, api, fmtD } from '../api'
 import { useSession } from '../App'
+import { DEFAULT_TENANT_COLOR, TENANT_PALETTE } from '../theme'
 import { Btn, Card, ErrorBox, Field, Modal, PageHead, Pill, Secret, useConfirm, useLoad, useToast } from '../ui'
 import { AuditTable } from './Audit'
 
@@ -25,8 +26,22 @@ function Tenants() {
   const toast = useToast()
   const { data, error, reload } = useLoad<any[]>(() => api('/api/tenants'), [])
   const [name, setName] = useState('')
+  const [color, setColor] = useState(DEFAULT_TENANT_COLOR)
+  const [logo, setLogo] = useState<string | null>(null)
+  const pickLogo = (f?: File) => {
+    if (!f) return
+    if (f.size > 300_000) return toast('Logo grande demais (máx. ~300 KB).', 'err')
+    const r = new FileReader()
+    r.onload = () => setLogo(String(r.result))
+    r.readAsDataURL(f)
+  }
   const create = async () => {
-    try { await api('/api/tenants', { body: { name } }); setName(''); toast('Cliente criado'); reload(); refresh() } catch (e: any) { toast(e.message, 'err') }
+    try {
+      await api('/api/tenants', { body: { name, color, logo: logo || undefined } })
+      setName(''); setColor(DEFAULT_TENANT_COLOR); setLogo(null)
+      toast('Cliente criado')
+      reload(); refresh()
+    } catch (e: any) { toast(e.message, 'err') }
   }
   const remove = async (t: any) => {
     const typed = prompt(`Excluir ${t.name} apaga contas, coletas, anotações e histórico deste cliente. Digite o nome do cliente para confirmar:`)
@@ -36,13 +51,49 @@ function Tenants() {
   return (
     <>
       <ErrorBox error={error} />
-      <Card title="Novo cliente"><div className="row"><input placeholder="Nome do cliente" value={name} onChange={(e) => setName(e.target.value)} /><Btn kind="primary" onClick={create} disabled={name.trim().length < 2}>Criar</Btn></div></Card>
+      <Card title="Novo cliente" actions={<Btn kind="primary" small onClick={create} disabled={name.trim().length < 2}>Criar cliente</Btn>}>
+        <div className="grid2">
+          <Field label="Nome do cliente">
+            <input placeholder="Ex.: Acme Corp" value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label="Logo do cliente (opcional)" hint="PNG, JPG ou SVG até 300 KB. Aparece no topo e nos relatórios PDF.">
+            <div className="row">
+              {logo && <img src={logo} alt="" className="logo-prev" />}
+              <input type="file" accept="image/png,image/jpeg,image/svg+xml" onChange={(e) => pickLogo(e.target.files?.[0])} />
+              {logo && <Btn small kind="ghost" onClick={() => setLogo(null)}>Remover</Btn>}
+            </div>
+          </Field>
+        </div>
+        <Field label="Cor do painel para este cliente" hint="Ao trocar para este cliente, o cabeçalho, botões e destaques assumem esta cor.">
+          <div className="palette-wrap">
+            <div className="palette-swatches">
+              {TENANT_PALETTE.map((c) => (
+                <button
+                  key={c.hex}
+                  type="button"
+                  title={c.name}
+                  className={`swatch ${color.toLowerCase() === c.hex ? 'on' : ''}`}
+                  style={{ background: c.hex }}
+                  onClick={() => setColor(c.hex)}
+                />
+              ))}
+            </div>
+            <input type="color" value={color} onChange={(e) => setColor(e.target.value)} title="Escolher outra cor" />
+            <span className="mono small muted">{color}</span>
+          </div>
+        </Field>
+      </Card>
       <Card pad={false}>
         <table className="t">
-          <thead><tr><th>Cliente</th><th>Identificador</th><th>Criado</th><th /></tr></thead>
+          <thead><tr><th>Cliente</th><th>Cor</th><th>Identificador</th><th>Criado</th><th /></tr></thead>
           <tbody>{(data || []).map((t) => (
-            <tr key={t.id}><td><span className="dot" style={{ background: t.color }} /> <b>{t.name}</b></td><td className="mono small">{t.slug}</td><td className="small">{fmtD(t.created_at)}</td>
-              <td className="r"><Btn small kind="ghost" onClick={() => location.assign(`/t/${t.id}/acessos`)}>Acessos</Btn><Btn small kind="ghost" onClick={() => remove(t)}>Excluir</Btn></td></tr>))}
+            <tr key={t.id}>
+              <td><span className="dot" style={{ background: t.color }} /> <b>{t.name}</b></td>
+              <td className="mono small muted">{t.color}</td>
+              <td className="mono small">{t.slug}</td>
+              <td className="small">{fmtD(t.created_at)}</td>
+              <td className="r"><Btn small kind="ghost" onClick={() => location.assign(`/t/${t.id}/acessos`)}>Acessos e Identidade</Btn><Btn small kind="ghost" onClick={() => remove(t)}>Excluir</Btn></td>
+            </tr>))}
           </tbody>
         </table>
       </Card>

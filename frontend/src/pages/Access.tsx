@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ago, api, ROLE_LABEL, type Role } from '../api'
 import { useSession, useTenant } from '../App'
+import { applyTenantTheme, DEFAULT_TENANT_COLOR, TENANT_PALETTE } from '../theme'
 import { Btn, Card, ErrorBox, Field, Modal, PageHead, Pill, Secret, useConfirm, useLoad, useToast } from '../ui'
 
 const ROLE_HELP: Record<Role, string> = {
@@ -82,9 +83,13 @@ function Branding({ onSaved }: { onSaved: () => Promise<void> }) {
   const toast = useToast()
   const { data } = useLoad<any>(() => api(`/api/tenants/${tenant.id}`), [tenant.id])
   const [name, setName] = useState('')
-  const [color, setColor] = useState('#4a7a37')
+  const [color, setColor] = useState(DEFAULT_TENANT_COLOR)
   const [logo, setLogo] = useState<string | null>(null)
-  useEffect(() => { if (data) { setName(data.name); setColor(data.color); setLogo(data.logo) } }, [data])
+  useEffect(() => { if (data) { setName(data.name); setColor(data.color || DEFAULT_TENANT_COLOR); setLogo(data.logo) } }, [data])
+  const changeColor = (hex: string) => {
+    setColor(hex)
+    applyTenantTheme(hex)
+  }
   const pick = (f?: File) => {
     if (!f) return
     if (f.size > 300_000) return toast('Logo grande demais (máx. ~300 KB).', 'err')
@@ -93,17 +98,34 @@ function Branding({ onSaved }: { onSaved: () => Promise<void> }) {
     r.readAsDataURL(f)
   }
   const save = async () => {
-    try { await api(`/api/tenants/${tenant.id}`, { method: 'PATCH', body: { name, color, logo: logo ?? '' } }); toast('Identidade do cliente salva'); onSaved() } catch (e: any) { toast(e.message, 'err') }
+    try { await api(`/api/tenants/${tenant.id}`, { method: 'PATCH', body: { name, color, logo: logo ?? '' } }); toast('Identidade do cliente salva'); await onSaved() } catch (e: any) { toast(e.message, 'err') }
   }
   return (
-    <Card title="Identidade do cliente" actions={<Btn kind="primary" small onClick={save}>Salvar</Btn>}>
-      <div className="grid3">
+    <Card title="Identidade visual do cliente" actions={<Btn kind="primary" small onClick={save}>Salvar</Btn>}>
+      <div className="grid2">
         <Field label="Nome do cliente"><input value={name} onChange={(e) => setName(e.target.value)} /></Field>
-        <Field label="Cor"><input type="color" value={color} onChange={(e) => setColor(e.target.value)} /></Field>
-        <Field label="Logo (vai na capa dos relatórios)" hint="PNG, JPG ou SVG, até 300 KB.">
+        <Field label="Logo (aparece no topo do painel e na capa dos relatórios)" hint="PNG, JPG ou SVG, até 300 KB.">
           <div className="row">{logo && <img src={logo} alt="" className="logo-prev" />}<input type="file" accept="image/png,image/jpeg,image/svg+xml" onChange={(e) => pick(e.target.files?.[0])} />{logo && <Btn small kind="ghost" onClick={() => setLogo('')}>Remover</Btn>}</div>
         </Field>
       </div>
+      <Field label="Paleta de cores do painel" hint="Clique em uma cor para pré-visualizar na hora e depois clique em Salvar.">
+        <div className="palette-wrap">
+          <div className="palette-swatches">
+            {TENANT_PALETTE.map((c) => (
+              <button
+                key={c.hex}
+                type="button"
+                title={c.name}
+                className={`swatch ${color.toLowerCase() === c.hex ? 'on' : ''}`}
+                style={{ background: c.hex }}
+                onClick={() => changeColor(c.hex)}
+              />
+            ))}
+          </div>
+          <input type="color" value={color} onChange={(e) => changeColor(e.target.value)} title="Cor personalizada" />
+          <span className="mono small muted">{color}</span>
+        </div>
+      </Field>
     </Card>
   )
 }

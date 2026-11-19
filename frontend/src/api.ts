@@ -63,7 +63,7 @@ export const ROLE_LABEL: Record<Role, string> = { admin: 'Administrador', analys
 export const ROLE_LEVEL: Record<Role, number> = { client: 0, viewer: 1, analyst: 2, admin: 3 }
 export const can = (role: Role | undefined, min: Role) => !!role && ROLE_LEVEL[role] >= ROLE_LEVEL[min]
 
-export interface TenantRef { id: number; name: string; slug: string; color: string; role: Role }
+export interface TenantRef { id: number; name: string; slug: string; color: string; logo?: string | null; role: Role }
 export interface Me {
   id: number; email: string; name: string; is_superadmin: boolean; must_change_password: boolean
   totp_enabled: boolean; last_login: string | null; tenants: TenantRef[]; app_name: string

@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, NavLink, Route, Routes, useNavigate, useParams
 import { api, can, ROLE_LABEL, setUnauthorizedHandler, type Me, type Role, type TenantRef } from './api'
 import logoWhite from './assets/logo-white.png'
 import logoColor from './assets/logo-color.png'
+import { applyTenantTheme, resetTenantTheme } from './theme'
 import { Btn, Field, useToast } from './ui'
 import Explorer from './pages/Explorer'
 import Collections from './pages/Collections'
@@ -91,6 +92,11 @@ function Shell({ tenant, children }: { tenant?: TenantRef; children: ReactNode }
   const [menu, setMenu] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
+    if (tenant?.color) applyTenantTheme(tenant.color)
+    else resetTenantTheme()
+    return () => { resetTenantTheme() }
+  }, [tenant?.id, tenant?.color])
+  useEffect(() => {
     if (!menu) return
     const onDown = (e: PointerEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenu(false) }
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(false) }
@@ -108,7 +114,17 @@ function Shell({ tenant, children }: { tenant?: TenantRef; children: ReactNode }
   return (
     <div className="shell">
       <header className="top">
-        <div className="brand" onClick={() => nav('/')}><img src={logoWhite} alt="G3 Solutions" /><div><b>{me.app_name}</b><span>Documentação viva da infraestrutura de cloud</span></div></div>
+        <div className="brand" onClick={() => nav('/')}>
+          {tenant?.logo ? (
+            <img src={tenant.logo} alt={tenant.name} className="brand-client-logo" />
+          ) : (
+            <img src={logoWhite} alt="G3 Solutions" />
+          )}
+          <div>
+            <b>{tenant ? tenant.name : me.app_name}</b>
+            <span>{tenant ? `${me.app_name} · Documentação viva` : 'Documentação viva da infraestrutura de cloud'}</span>
+          </div>
+        </div>
         {me.tenants.length > 0 && (
           <select className="tenant-sel" value={tenant?.id ?? ''} onChange={(e) => nav(`/t/${e.target.value}/explorer`)} aria-label="Cliente">
             {!tenant && <option value="">Selecionar cliente…</option>}

@@ -77,10 +77,10 @@ class LoginIn(BaseModel):
 
 def user_out(db: Session, u: User) -> dict:
     if u.is_superadmin:
-        tenants = [{"id": t.id, "name": t.name, "slug": t.slug, "color": t.color, "role": "admin"}
+        tenants = [{"id": t.id, "name": t.name, "slug": t.slug, "color": t.color, "logo": t.logo, "role": "admin"}
                    for t in db.scalars(select(Tenant).order_by(Tenant.name))]
     else:
-        tenants = [{"id": m.tenant.id, "name": m.tenant.name, "slug": m.tenant.slug, "color": m.tenant.color, "role": m.role}
+        tenants = [{"id": m.tenant.id, "name": m.tenant.name, "slug": m.tenant.slug, "color": m.tenant.color, "logo": m.tenant.logo, "role": m.role}
                    for m in db.scalars(select(Membership).where(Membership.user_id == u.id))]
         tenants.sort(key=lambda x: x["name"].lower())
     return {"id": u.id, "email": u.email, "name": u.name, "is_superadmin": u.is_superadmin,
