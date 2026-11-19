@@ -5,7 +5,7 @@
 #   tls /certs/docops.crt /certs/docops.key   (e monte a pasta /certs no docker-compose.yml)
 {
 	admin off
-	default_sni {$DOCOPS_HOST}
+	default_sni {$DOCOPS_DEFAULT_SNI}
 }
 
 {$DOCOPS_HOST} {

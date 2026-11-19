@@ -3,7 +3,7 @@
 # Redireciona HTTP explicitamente para a porta HTTPS de HML para nunca redirecionar para PRD (443).
 {
 	admin off
-	default_sni {$DOCOPS_HOST}
+	default_sni {$DOCOPS_DEFAULT_SNI}
 	auto_https disable_redirects
 }
 
